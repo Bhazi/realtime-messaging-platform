@@ -1,0 +1,42 @@
+{
+  "name": "express-ts-messanger-backend",
+  "version": "1.0.0",
+  "description": "Messenger Application backend.",
+  "license": "ISC",
+  "author": "Basim",
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^7.9.1",
+    "@socket.io/redis-adapter": "^8.3.0",
+    "argon2": "^0.45.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.6.2",
+    "helmet": "^8.3.0",
+    "jose": "^6.2.8",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.2.0",
+    "pino": "^10.3.1",
+    "pino-http": "^11.0.0",
+    "redis": "^6.2.1",
+    "socket.io": "^4.8.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/morgan": "^1.9.10",
+    "@types/node": "^22.13.0",
+    "morgan": "^1.11.0",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2"
+  }
+}

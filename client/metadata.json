@@ -1,0 +1,6 @@
+{
+  "name": "Luma Messenger",
+  "description": "Full-stack messaging platform supporting text, photo, video, and file sharing in direct and group chats.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
