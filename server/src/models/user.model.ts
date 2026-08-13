@@ -44,4 +44,14 @@ export class UserModel {
     ]);
     return rows[0];
   }
+
+  static async findByIdentifier(identifier: string): Promise {
+    const query = `
+      SELECT * FROM users 
+      WHERE email = $1 OR username = $1
+      LIMIT 1;
+    `;
+    const { rows } = await pool.query(query, [identifier]);
+    return rows[0] || null;
+  }
 }

@@ -30,47 +30,6 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSignUpSuccess }) => {
     return result;
   };
 
-  // const handleSubmit = (e: React.FormEvent) => {
-  //   e.preventDefault();
-  //   setErrorMessage('');
-
-  //   if (!username || !email || !displayName || !password || !confirmPassword) {
-  //     setErrorMessage('Please fill in all required fields.');
-  //     return;
-  //   }
-
-  //   if (password !== confirmPassword) {
-  //     setErrorMessage('Passwords do not match.');
-  //     return;
-  //   }
-
-  //   if (password.length < 6) {
-  //     setErrorMessage('Password must be at least 6 characters.');
-  //     return;
-  //   }
-
-  //   setIsLoading(true);
-
-  //   setTimeout(() => {
-  //     setIsLoading(false);
-  //     const publicUid = generatePublicUid();
-
-  //     const newUser: User = {
-  //       id: `usr_${Date.now()}`,
-  //       uid: publicUid,
-  //       username: username.trim().toLowerCase(),
-  //       email: email.trim().toLowerCase(),
-  //       displayName: displayName.trim(),
-  //       avatarUrl: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=250&q=80`,
-  //       createdAt: new Date().toISOString(),
-  //     };
-
-  //     messengerStore.setCurrentUser(newUser);
-  //     onSignUpSuccess(newUser);
-  //     navigate('/app');
-  //   }, 600);
-  // };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage("");

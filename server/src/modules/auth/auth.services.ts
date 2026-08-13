@@ -1,6 +1,9 @@
 import argon2 from "argon2";
 import { UserModel } from "../../models/user.model.js";
 import crypto from "node:crypto";
+import jwt from "jsonwebtoken";
+
+const JWT_SECRET = process.env.JWT_SECRET || "super_secret_jwt_key_123";
 
 interface Signup {
   username: string;
@@ -41,5 +44,34 @@ export class AuthService {
       displayName: data.displayName,
       passwordHash,
     });
+  }
+
+  static async loginUser(identifier: string, plainPassword: string) {
+    const user = await UserModel.findByIdentifier(identifier);
+
+    if (!user) {
+      throw new Error("Invalid username/email or password.");
+    }
+
+    // Verify hashed password with Argon2
+    const isPasswordValid = await argon2.verify(
+      user.password_hash,
+      plainPassword,
+    );
+    if (!isPasswordValid) {
+      throw new Error("Invalid username/email or password.");
+    }
+
+    // Issue JWT Token
+    const token = jwt.sign(
+      { userId: user.id, publicUid: user.public_uid },
+      JWT_SECRET,
+      { expiresIn: "7d" },
+    );
+
+    // Omit sensitive password_hash before returning user object
+    const { password_hash, ...safeUser } = user;
+
+    return { user: safeUser, token };
   }
 }

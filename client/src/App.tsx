@@ -1,6 +1,6 @@
 // import { MessengerLayout } from "./components/MessengerLayout";
 import { messengerStore } from "./messangerStore/messengerStore";
-// import { LoginForm } from "./components/LoginForm";
+import { LoginForm } from "./features/auth/components/LoginForm";
 import React, { useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthLayout } from "./features/auth/AuthLayout";
@@ -34,6 +34,19 @@ export default function App() {
             ) : (
               <Navigate to="/login" replace />
             )
+          }
+        />
+
+        {/* Login Page */}
+        <Route
+          path="/login"
+          element={
+            <AuthLayout
+              taglineHeader="You can easily"
+              taglineTitle="Start connecting Your people, your conversations, your space"
+            >
+              <LoginForm onLoginSuccess={handleLoginSuccess} />
+            </AuthLayout>
           }
         />
 
