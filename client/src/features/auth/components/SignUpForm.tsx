@@ -20,16 +20,6 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSignUpSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
-  // Generate random 8-character uppercase public UID e.g. 8KX4P92M
-  const generatePublicUid = () => {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    let result = "";
-    for (let i = 0; i < 8; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
@@ -61,7 +51,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSignUpSuccess }) => {
 
       const newUser: User = {
         id: data.user.id,
-        uid: data.user.public_uid,
+        uid: data.user.uid,
         username: data.user.username,
         email: data.user.email,
         displayName: data.user.display_name,

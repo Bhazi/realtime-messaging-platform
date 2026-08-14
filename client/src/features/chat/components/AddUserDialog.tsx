@@ -22,7 +22,7 @@ export const AddUserDialog: React.FC<AddUserDialogProps> = ({
   const [errorMsg, setErrorMsg] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
     setSearchedUser(null);
@@ -33,7 +33,7 @@ export const AddUserDialog: React.FC<AddUserDialogProps> = ({
       return;
     }
 
-    const found = messengerStore.getUserByUid(uidInput.trim());
+    const found = await messengerStore.getUserByUid(uidInput.trim());
     if (!found) {
       setErrorMsg(`No user found with UID "${uidInput.trim().toUpperCase()}".`);
       return;
@@ -47,10 +47,13 @@ export const AddUserDialog: React.FC<AddUserDialogProps> = ({
     setSearchedUser(found);
   };
 
-  const handleAddUser = () => {
+  const handleAddUser = async () => {
     if (!searchedUser) return;
     try {
-      messengerStore.createDirectConversation(currentUserId, searchedUser.uid);
+      await messengerStore.createDirectConversation(
+        currentUserId,
+        searchedUser.uid,
+      );
       setIsSuccess(true);
       setTimeout(() => {
         onUserAdded(searchedUser);

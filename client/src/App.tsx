@@ -1,4 +1,4 @@
-// import { MessengerLayout } from "./components/MessengerLayout";
+import { MessengerLayout } from "./features/chat/MessengerLayout";
 import { messengerStore } from "./messangerStore/messengerStore";
 import { LoginForm } from "./features/auth/components/LoginForm";
 import React, { useState } from "react";
@@ -60,6 +60,49 @@ export default function App() {
             >
               <SignUpForm onSignUpSuccess={handleLoginSuccess} />
             </AuthLayout>
+          }
+        />
+
+        {/* Main Messenger Routes */}
+        <Route
+          path="/app"
+          element={
+            currentUser ? (
+              <MessengerLayout
+                currentUser={currentUser}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        <Route
+          path="/app/chat/:conversationId"
+          element={
+            currentUser ? (
+              <MessengerLayout
+                currentUser={currentUser}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        <Route
+          path="/app/settings"
+          element={
+            currentUser ? (
+              <MessengerLayout
+                currentUser={currentUser}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <Navigate to="/login" replace />
+            )
           }
         />
 

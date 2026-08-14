@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Sidebar } from "../chat/components/Sidebar";
 import { ChatArea } from "../chat/components/ChatArea";
@@ -26,12 +26,40 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
 
+  // const [conversations, setConversations] = useState([]);
+
   const isSettings = location.pathname.includes("/settings");
 
-  const conversations = messengerStore.getConversations(currentUser.id);
-  const activeConversation = conversationId
-    ? messengerStore.getConversationById(conversationId)
-    : conversations[0];
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversation, setActiveConversation] =
+    useState<Conversation | null>(null);
+
+  const loadConversations = async () => {
+    try {
+      const result = await messengerStore.getConversations(currentUser.id);
+
+      setConversations(result);
+
+      if (conversationId) {
+        const active = await messengerStore.getConversationById(conversationId);
+
+        console.log(active, "from active");
+
+        setActiveConversation(active);
+      } else {
+        setActiveConversation(result[0] ?? null);
+      }
+
+      return result;
+    } catch (error) {
+      console.error("Failed to load conversations:", error);
+      return [];
+    }
+  };
+
+  useEffect(() => {
+    loadConversations();
+  }, [currentUser.id, conversationId]);
 
   const handleRefresh = () => {
     setRefreshKey((prev) => prev + 1);
@@ -41,13 +69,13 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
     navigate(`/app/chat/${id}`);
   };
 
-  const handleUserAdded = (user: User) => {
-    handleRefresh();
-    // Navigate to the created direct chat
-    const updatedConvs = messengerStore.getConversations(currentUser.id);
-    const created = updatedConvs.find(
+  const handleUserAdded = async (user: User) => {
+    const updatedConversations = await loadConversations();
+
+    const created = updatedConversations.find(
       (c) => c.type === "DIRECT" && c.members.some((m) => m.userId === user.id),
     );
+
     if (created) {
       navigate(`/app/chat/${created.id}`);
     }
