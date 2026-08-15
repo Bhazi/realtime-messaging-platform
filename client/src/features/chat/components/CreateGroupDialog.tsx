@@ -51,7 +51,7 @@ export const CreateGroupDialog: React.FC<CreateGroupDialogProps> = ({
     setAddedUids(addedUids.filter((u) => u !== uid));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
 
@@ -61,7 +61,7 @@ export const CreateGroupDialog: React.FC<CreateGroupDialogProps> = ({
     }
 
     try {
-      const newGroup = messengerStore.createGroupConversation(
+      const newGroup = await messengerStore.createGroupConversation(
         currentUserId,
         groupName,
         addedUids,

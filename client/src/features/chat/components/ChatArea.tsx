@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Paperclip,
   Image as ImageIcon,
@@ -33,7 +33,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
 
-  const messages = messengerStore.getMessages(conversation.id);
+  // const messages = messengerStore.getMessages(conversation.id);
+
+  const [messages, setMessages] = useState([]);
+
+  useEffect(() => {
+    const fetchMessages = async () => {
+      const result = await messengerStore.getMessages(conversation.id);
+      setMessages(result);
+    };
+
+    fetchMessages();
+  }, [conversation.id]);
 
   const currentMember = conversation.members.find(
     (m) => m.userId === currentUser.id,
@@ -42,23 +53,23 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     conversation.type === "GROUP" &&
     (currentMember?.role === "OWNER" || currentMember?.role === "ADMIN");
 
-  const handleSendText = (e?: React.FormEvent) => {
+  const handleSendText = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!textMessage.trim()) return;
 
-    messengerStore.sendMessage(conversation.id, currentUser.id, "TEXT", {
+    await messengerStore.sendMessage(conversation.id, currentUser.id, "TEXT", {
       content: textMessage.trim(),
     });
     setTextMessage("");
     onRefresh();
   };
 
-  const handleSendFile = (
+  const handleSendFile = async (
     type: MessageType,
     fileData: { filename: string; mimeType: string; size: number; url: string },
     caption?: string,
   ) => {
-    messengerStore.sendMessage(conversation.id, currentUser.id, type, {
+    await messengerStore.sendMessage(conversation.id, currentUser.id, type, {
       content: caption,
       attachmentData: fileData,
     });
