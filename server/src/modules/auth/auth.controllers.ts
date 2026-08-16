@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { AuthService } from "./auth.services.js";
 
 export class AuthController {
-  static async signup(req: Request, res: Response): Promise {
+  static async signup(req: Request, res: Response): Promise<void> {
     try {
       const { username, email, displayName, password } = req.body;
 
@@ -24,7 +24,7 @@ export class AuthController {
     }
   }
 
-  static async login(req: Request, res: Response): Promise {
+  static async login(req: Request, res: Response): Promise<void> {
     try {
       const { identifier, password } = req.body;
 

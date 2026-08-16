@@ -65,7 +65,7 @@ export class AuthService {
 
     // Issue JWT Token
     const token = jwt.sign(
-      { userId: user.id, publicUid: user.public_uid },
+      { userId: user.id, publicUid: user.uid },
       JWT_SECRET,
       { expiresIn: "7d" },
     );

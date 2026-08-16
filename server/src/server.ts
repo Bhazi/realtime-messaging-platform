@@ -18,10 +18,14 @@ app.use(cors());
 app.use(express.json());
 
 import { connectDB } from "./config/db.js";
+// Serve uploaded static avatar images
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/users", userRoutes);
 app.use("/api/v1/chat", chatRoutes);
+// Mount API routes matching /api/v1/profile
+app.use("/api/v1/profile", userRoutes);
 
 if (process.env.NODE_ENV !== "production") {
   app.use(morgan("dev"));

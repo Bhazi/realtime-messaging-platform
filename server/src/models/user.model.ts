@@ -1,19 +1,12 @@
 import { pool } from "../config/db.js";
 import argon2 from "argon2";
-
-export interface UserRow {
-  id: string;
-  uid: string;
-  username: string;
-  email: string;
-  display_name: string;
-  password_hash: string;
-  avatar_url: string;
-  created_at: Date;
-}
+import UserRow from "../types/types.js";
 
 export class UserModel {
-  static async findByEmailOrUsername(email: string, username: string): Promise {
+  static async findByEmailOrUsername(
+    email: string,
+    username: string,
+  ): Promise<UserRow[]> {
     const query = `
       SELECT * FROM users
       WHERE email = $1 OR username = $2
@@ -29,7 +22,7 @@ export class UserModel {
     email: string;
     displayName: string;
     passwordHash: string;
-  }): Promise {
+  }): Promise<UserRow> {
     const query = `
       INSERT INTO users (uid, username, email, display_name, password_hash)
       VALUES ($1, $2, $3, $4, $5)
@@ -47,7 +40,7 @@ export class UserModel {
     return rows[0];
   }
 
-  static async findByIdentifier(identifier: string): Promise {
+  static async findByIdentifier(identifier: string): Promise<UserRow | null> {
     const query = `
       SELECT * FROM users 
       WHERE email = $1 OR username = $1
@@ -57,7 +50,7 @@ export class UserModel {
     return rows[0] || null;
   }
 
-  static async findAll(): Promise {
+  static async findAll(): Promise<UserRow[]> {
     const query = `
       SELECT id, uid, username, email, display_name, avatar_url, created_at 
       FROM users
@@ -68,7 +61,53 @@ export class UserModel {
     return rows;
   }
 
-  static async findByUid(uid: string): Promise {
+  /**
+   * Fetches a single user by their primary key ID.
+   */
+  static async getUserById(id: string): Promise<UserRow | undefined> {
+    if (!id) return undefined;
+
+    const query = `
+      SELECT 
+        id,
+        uid,
+        username,
+        email,
+        display_name AS "displayName",
+        avatar_url AS "avatarUrl",
+        created_at AS "createdAt"
+      FROM users
+      WHERE id = $1;
+    `;
+
+    const { rows } = await pool.query(query, [id]);
+    return rows[0] || undefined;
+  }
+
+  /**
+   * Fetches a single user by their public UID (e.g. 8KX4P92M).
+   */
+  static async getUserByUid(uid: string): Promise<UserRow | undefined> {
+    if (!uid) return undefined;
+
+    const query = `
+      SELECT 
+        id,
+        uid,
+        username,
+        email,
+        display_name AS "displayName",
+        avatar_url AS "avatarUrl",
+        created_at AS "createdAt"
+      FROM users
+      WHERE uid = $1;
+    `;
+
+    const { rows } = await pool.query(query, [uid]);
+    return rows[0] || undefined;
+  }
+
+  static async findByUid(uid: string): Promise<UserRow> {
     const query = `
       SELECT id, uid, username, display_name, avatar_url 
       FROM users
@@ -136,13 +175,13 @@ export class UserModel {
       SET ${setClauses.join(", ")}
       WHERE id = $${userIdParamIndex}
       RETURNING 
-      id,
-      uid,
-      username,
-      display_name AS "displayName",
-      email,
-      avatar_url,
-      created_at 
+        id,
+        uid,
+        username,
+        email,
+        display_name AS "displayName",
+        avatar_url AS "avatarUrl",
+        created_at AS "createdAt" 
     `;
 
     const { rows } = await pool.query(query, queryParams);
@@ -194,5 +233,39 @@ export class UserModel {
     await pool.query(updateQuery, [newPasswordHash, userId]);
 
     return true;
+  }
+
+  /**
+   * Updates user's avatar_url in PostgreSQL and returns updated user profile.
+   */
+  static async updateAvatarUrl(userId: string, avatarUrl: string) {
+    if (!userId) {
+      throw new Error("userId is required.");
+    }
+    if (!avatarUrl) {
+      throw new Error("avatarUrl is required.");
+    }
+
+    const query = `
+      UPDATE users
+      SET avatar_url = $1
+      WHERE id = $2
+      RETURNING 
+        id,
+        uid,
+        username,
+        email,
+        display_name AS "displayName",
+        avatar_url AS "avatarUrl",
+        created_at AS "createdAt"
+    `;
+
+    const { rows } = await pool.query(query, [avatarUrl, userId]);
+
+    if (rows.length === 0) {
+      throw new Error("User not found.");
+    }
+
+    return rows[0];
   }
 }
