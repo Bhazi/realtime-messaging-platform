@@ -3,8 +3,6 @@ import { AuthService } from "./auth.services.js";
 
 export class AuthController {
   static async signup(req: Request, res: Response): Promise {
-    console.log(req.body);
-
     try {
       const { username, email, displayName, password } = req.body;
 
@@ -19,8 +17,6 @@ export class AuthController {
         displayName: displayName.trim(),
         password,
       });
-
-      console.log(user, " from the user");
 
       res.status(201).json({ message: "User created successfully", user });
     } catch (err: any) {

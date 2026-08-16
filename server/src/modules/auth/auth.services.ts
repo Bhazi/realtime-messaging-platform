@@ -13,7 +13,8 @@ interface Signup {
 }
 
 export class AuthService {
-  private static generatePublicUid(): string {
+  // Generate random 9-character uppercase public UID e.g. 8KX94P92M
+  private static generateUid(): string {
     const value = crypto.randomBytes(6).readUIntBE(0, 6);
 
     return value.toString(36).toUpperCase().padStart(9, "0").slice(0, 9);
@@ -35,10 +36,10 @@ export class AuthService {
       timeCost: 3,
     });
 
-    const publicUid = this.generatePublicUid();
+    const uid = this.generateUid();
 
     return await UserModel.create({
-      publicUid,
+      uid,
       username: data.username,
       email: data.email,
       displayName: data.displayName,

@@ -4,7 +4,9 @@ import dotenv from "dotenv";
 import morgan from "morgan";
 import path from "path";
 
-import routes from "./modules/auth/auth.routes.js";
+import authRoutes from "./modules/auth/auth.routes.js";
+import userRoutes from "./modules/user/user.routes.js";
+import chatRoutes from "./modules/chat/chat.routes.js";
 
 dotenv.config();
 
@@ -17,7 +19,9 @@ app.use(express.json());
 
 import { connectDB } from "./config/db.js";
 
-app.use("/api/v1/auth", routes);
+app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/users", userRoutes);
+app.use("/api/v1/chat", chatRoutes);
 
 if (process.env.NODE_ENV !== "production") {
   app.use(morgan("dev"));
