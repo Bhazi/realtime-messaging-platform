@@ -306,27 +306,108 @@ export class ChatModel {
   /**
    * Creates a GROUP conversation and inserts all members within a single transaction.
    */
+  // static async createGroupConversation(
+  //   name: string,
+  //   createdBy: string,
+  //   memberUserIds: string[],
+  // ) {
+  //   const client = await pool.connect();
+
+  //   try {
+  //     await client.query("BEGIN");
+
+  //     // 1. Insert the group conversation
+  //     const insertConvQuery = `
+  //       INSERT INTO conversations (type, name, created_by)
+  //       VALUES ('GROUP', $1, $2)
+  //       RETURNING id, type, name, avatar_url AS "avatarUrl", created_by AS "createdBy", created_at AS "createdAt", updated_at AS "updatedAt";
+  //     `;
+  //     const convRes = await client.query(insertConvQuery, [name, createdBy]);
+  //     const conversation = convRes.rows[0];
+
+  //     // 2. Prepare bulk insert for group members (Creator = OWNER, others = MEMBER)
+  //     // Deduplicate member user IDs
+  //     const uniqueMemberIds = Array.from(
+  //       new Set([createdBy, ...memberUserIds]),
+  //     );
+
+  //     const memberValues: string[] = [];
+  //     const queryParams: any[] = [conversation.id];
+
+  //     uniqueMemberIds.forEach((userId, index) => {
+  //       const paramIndex = queryParams.length + 1; // Start parameters after conversation.id ($1)
+  //       const role = userId === createdBy ? "OWNER" : "MEMBER";
+
+  //       memberValues.push(`($1, $${paramIndex}, $${paramIndex + 1})`);
+  //       queryParams.push(userId, role);
+  //     });
+
+  //     const insertMembersQuery = `
+  //       INSERT INTO conversation_members (conversation_id, user_id, role)
+  //       VALUES ${memberValues.join(", ")}
+  //       RETURNING conversation_id AS "conversationId", user_id AS "userId", role, joined_at AS "joinedAt", left_at AS "leftAt", hidden_at AS "hiddenAt";
+  //     `;
+
+  //     const membersRes = await client.query(insertMembersQuery, queryParams);
+
+  //     await client.query("COMMIT");
+
+  //     return {
+  //       ...conversation,
+  //       members: membersRes.rows,
+  //     };
+  //   } catch (error) {
+  //     await client.query("ROLLBACK");
+  //     throw error;
+  //   } finally {
+  //     client.release();
+  //   }
+  // }
+
   static async createGroupConversation(
     name: string,
     createdBy: string,
     memberUserIds: string[],
+    avatarUrl: string | null = null,
   ) {
     const client = await pool.connect();
 
     try {
       await client.query("BEGIN");
 
+      // --------------------------------------------------
       // 1. Insert the group conversation
+      // --------------------------------------------------
       const insertConvQuery = `
-        INSERT INTO conversations (type, name, created_by)
-        VALUES ('GROUP', $1, $2)
-        RETURNING id, type, name, avatar_url AS "avatarUrl", created_by AS "createdBy", created_at AS "createdAt", updated_at AS "updatedAt";
-      `;
-      const convRes = await client.query(insertConvQuery, [name, createdBy]);
+      INSERT INTO conversations (
+        type,
+        name,
+        avatar_url,
+        created_by
+      )
+      VALUES ('GROUP', $1, $2, $3)
+      RETURNING
+        id,
+        type,
+        name,
+        avatar_url AS "avatarUrl",
+        created_by AS "createdBy",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt";
+    `;
+
+      const convRes = await client.query(insertConvQuery, [
+        name,
+        avatarUrl,
+        createdBy,
+      ]);
+
       const conversation = convRes.rows[0];
 
-      // 2. Prepare bulk insert for group members (Creator = OWNER, others = MEMBER)
-      // Deduplicate member user IDs
+      // --------------------------------------------------
+      // 2. Prepare group members
+      // --------------------------------------------------
+
       const uniqueMemberIds = Array.from(
         new Set([createdBy, ...memberUserIds]),
       );
@@ -334,23 +415,47 @@ export class ChatModel {
       const memberValues: string[] = [];
       const queryParams: any[] = [conversation.id];
 
-      uniqueMemberIds.forEach((userId, index) => {
-        const paramIndex = queryParams.length + 1; // Start parameters after conversation.id ($1)
+      uniqueMemberIds.forEach((userId) => {
+        const paramIndex = queryParams.length + 1;
+
         const role = userId === createdBy ? "OWNER" : "MEMBER";
 
         memberValues.push(`($1, $${paramIndex}, $${paramIndex + 1})`);
+
         queryParams.push(userId, role);
       });
 
+      // --------------------------------------------------
+      // 3. Insert group members
+      // --------------------------------------------------
+
       const insertMembersQuery = `
-        INSERT INTO conversation_members (conversation_id, user_id, role)
-        VALUES ${memberValues.join(", ")}
-        RETURNING conversation_id AS "conversationId", user_id AS "userId", role, joined_at AS "joinedAt", left_at AS "leftAt", hidden_at AS "hiddenAt";
-      `;
+      INSERT INTO conversation_members (
+        conversation_id,
+        user_id,
+        role
+      )
+      VALUES ${memberValues.join(", ")}
+      RETURNING
+        conversation_id AS "conversationId",
+        user_id AS "userId",
+        role,
+        joined_at AS "joinedAt",
+        left_at AS "leftAt",
+        hidden_at AS "hiddenAt";
+    `;
 
       const membersRes = await client.query(insertMembersQuery, queryParams);
 
+      // --------------------------------------------------
+      // 4. Commit transaction
+      // --------------------------------------------------
+
       await client.query("COMMIT");
+
+      // --------------------------------------------------
+      // 5. Return conversation
+      // --------------------------------------------------
 
       return {
         ...conversation,
@@ -561,5 +666,239 @@ export class ChatModel {
 
     const { rows } = await pool.query(query);
     return rows;
+  }
+
+  /**
+   * Adds a user (found by targetUid) to a group conversation.
+   * Ensures actor (currentUserId) is OWNER or ADMIN.
+   */
+  // static async addUserToGroup(
+  //   conversationId: string,
+  //   currentUserId: string,
+  //   targetUid: string,
+  // ) {
+  //   const client = await pool.connect();
+
+  //   try {
+  //     await client.query("BEGIN");
+
+  //     // 1. Fetch target user by public UID
+  //     const targetUserQuery = `
+  //       SELECT id, uid, username, display_name AS "displayName"
+  //       FROM users
+  //       WHERE uid = $1;
+  //     `;
+  //     const targetUserRes = await client.query(targetUserQuery, [targetUid]);
+
+  //     if (targetUserRes.rows.length === 0) {
+  //       throw new Error("User with this UID does not exist.");
+  //     }
+
+  //     const targetUserId = targetUserRes.rows[0].id;
+
+  //     // 2. Check if actor (currentUserId) is OWNER or ADMIN of the group
+  //     const actorCheckQuery = `
+  //       SELECT role, left_at
+  //       FROM conversation_members
+  //       WHERE conversation_id = $1 AND user_id = $2;
+  //     `;
+  //     const actorRes = await client.query(actorCheckQuery, [
+  //       conversationId,
+  //       currentUserId,
+  //     ]);
+
+  //     if (actorRes.rows.length === 0) {
+  //       throw new Error("Conversation not found.");
+  //     }
+
+  //     const actorRole = actorRes.rows[0].role;
+  //     const actorLeftAt = actorRes.rows[0].left_at;
+
+  //     if (actorLeftAt || (actorRole !== "OWNER" && actorRole !== "ADMIN")) {
+  //       throw new Error("Only admins or owners can add new members.");
+  //     }
+
+  //     // 3. Check target user's existing membership status
+  //     const targetMemberQuery = `
+  //       SELECT id, left_at
+  //       FROM conversation_members
+  //       WHERE conversation_id = $1 AND user_id = $2;
+  //     `;
+  //     const targetMemberRes = await client.query(targetMemberQuery, [
+  //       conversationId,
+  //       targetUserId,
+  //     ]);
+
+  //     if (targetMemberRes.rows.length > 0) {
+  //       const existingMember = targetMemberRes.rows[0];
+
+  //       if (existingMember.left_at === null) {
+  //         throw new Error("User is already an active member of this group.");
+  //       }
+
+  //       // Re-join user if they previously left
+  //       await client.query(
+  //         `
+  //           UPDATE conversation_members
+  //           SET left_at = NULL, joined_at = NOW(), role = 'MEMBER'
+  //           WHERE conversation_id = $1 AND user_id = $2;
+  //         `,
+  //         [conversationId, targetUserId],
+  //       );
+  //     } else {
+  //       // Insert new member
+  //       await client.query(
+  //         `
+  //           INSERT INTO conversation_members (conversation_id, user_id, role, joined_at)
+  //           VALUES ($1, $2, 'MEMBER', NOW());
+  //         `,
+  //         [conversationId, targetUserId],
+  //       );
+  //     }
+
+  //     // 4. Update conversation updated_at timestamp
+  //     await client.query(
+  //       `UPDATE conversations SET updated_at = NOW() WHERE id = $1;`,
+  //       [conversationId],
+  //     );
+
+  //     await client.query("COMMIT");
+
+  //     return {
+  //       conversationId,
+  //       addedUser: targetUserRes.rows[0],
+  //     };
+  //   } catch (error) {
+  //     await client.query("ROLLBACK");
+  //     throw error;
+  //   } finally {
+  //     client.release();
+  //   }
+  // }
+
+  /**
+   * Adds a user (by public UID) to a GROUP conversation.
+   * Enforces that actor (currentUserId) is an active OWNER or ADMIN.
+   */
+  static async addUserToGroup(
+    conversationId: string,
+    currentUserId: string,
+    targetUid: string,
+  ) {
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      // 1. Resolve target user by public UID
+      const targetUserQuery = `
+        SELECT id, uid, username, display_name AS "displayName", avatar_url AS "avatarUrl"
+        FROM users
+        WHERE uid = $1;
+      `;
+      const targetUserRes = await client.query(targetUserQuery, [targetUid]);
+
+      if (targetUserRes.rows.length === 0) {
+        throw new Error("User with this UID does not exist.");
+      }
+
+      const targetUser = targetUserRes.rows[0];
+      const targetUserId = targetUser.id;
+
+      // 2. Fetch conversation & verify it is a GROUP chat
+      const convQuery = `
+        SELECT id, type 
+        FROM conversations 
+        WHERE id = $1;
+      `;
+      const convRes = await client.query(convQuery, [conversationId]);
+
+      if (convRes.rows.length === 0) {
+        throw new Error("Conversation not found.");
+      }
+
+      if (convRes.rows[0].type !== "GROUP") {
+        throw new Error("Cannot add members to a DIRECT conversation.");
+      }
+
+      // 3. Verify actor is an active OWNER or ADMIN in the conversation
+      const actorQuery = `
+        SELECT role, left_at 
+        FROM conversation_members
+        WHERE conversation_id = $1 AND user_id = $2;
+      `;
+      const actorRes = await client.query(actorQuery, [
+        conversationId,
+        currentUserId,
+      ]);
+
+      if (actorRes.rows.length === 0 || actorRes.rows[0].left_at !== null) {
+        throw new Error("You are not an active member of this conversation.");
+      }
+
+      const actorRole = actorRes.rows[0].role;
+      if (actorRole !== "OWNER" && actorRole !== "ADMIN") {
+        throw new Error("Only admins or owners can add new members.");
+      }
+
+      // 4. Check target user's existing membership state
+      const targetMemberQuery = `
+        SELECT conversation_id, user_id, role, left_at, hidden_at 
+        FROM conversation_members
+        WHERE conversation_id = $1 AND user_id = $2;
+      `;
+      const targetMemberRes = await client.query(targetMemberQuery, [
+        conversationId,
+        targetUserId,
+      ]);
+
+      if (targetMemberRes.rows.length > 0) {
+        const existingMember = targetMemberRes.rows[0];
+
+        if (existingMember.left_at === null) {
+          throw new Error("User is already an active member of this group.");
+        }
+
+        // Reactivate previously left member
+        await client.query(
+          `
+            UPDATE conversation_members
+            SET left_at = NULL, 
+                hidden_at = NULL, 
+                joined_at = CURRENT_TIMESTAMP, 
+                role = 'MEMBER'
+            WHERE conversation_id = $1 AND user_id = $2;
+          `,
+          [conversationId, targetUserId],
+        );
+      } else {
+        // Insert new member entry
+        await client.query(
+          `
+            INSERT INTO conversation_members (conversation_id, user_id, role, joined_at)
+            VALUES ($1, $2, 'MEMBER', CURRENT_TIMESTAMP);
+          `,
+          [conversationId, targetUserId],
+        );
+      }
+
+      // 5. Update conversation activity timestamp
+      await client.query(
+        `UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1;`,
+        [conversationId],
+      );
+
+      await client.query("COMMIT");
+
+      return {
+        conversationId,
+        addedUser: targetUser,
+      };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 }

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { UserController } from "./user.controllers.js";
-import { uploadAvatar } from "../../middlewares/uploads.js";
+import { uploadAvatar, uploadGroupImage } from "../../middlewares/uploads.js";
 
 const router = Router();
 
@@ -21,5 +21,27 @@ router.post(
   uploadAvatar.single("avatar"), // Expects formData field name to be 'avatar'
   UserController.updateAvatar,
 );
+
+// Delete / Dissolve Group Route
+router.delete("/group/:conversationId", UserController.deleteGroupConversation);
+
+// Update Group Member Role Route
+router.patch(
+  "/groups/:conversationId/members/role",
+  UserController.updateGroupMemberRole,
+);
+
+// Remove user from group route
+router.delete(
+  "/groups/:conversationId/members/:targetUserId",
+  UserController.removeUserFromGroup,
+);
+
+// router.post(
+//   "/group",
+//   uploadGroupImage.single("groupImage"),
+//   GroupController.createGroup,
+
+// );
 
 export default router;

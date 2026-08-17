@@ -50,12 +50,46 @@ export class ChatService {
     return await ChatModel.getConversationsForUser(userId);
   }
 
+  // static async createGroupConversation(
+  //   currentUserId: string,
+  //   name: string,
+  //   memberUids: string[],
+  // ) {
+  //   const trimmedName = name.trim();
+  //   if (!trimmedName) {
+  //     throw new Error("Group name is required.");
+  //   }
+
+  //   // Resolve public_uids to internal user IDs asynchronously
+  //   const memberUserIds: string[] = [];
+
+  //   if (Array.isArray(memberUids) && memberUids.length > 0) {
+  //     const userPromises = memberUids.map((uid) => UserModel.findByUid(uid));
+  //     const resolvedUsers = await Promise.all(userPromises);
+
+  //     resolvedUsers.forEach((user) => {
+  //       if (user && user.id !== currentUserId) {
+  //         memberUserIds.push(user.id);
+  //       }
+  //     });
+  //   }
+
+  //   // Create group conversation via model transaction
+  //   return await ChatModel.createGroupConversation(
+  //     trimmedName,
+  //     currentUserId,
+  //     memberUserIds,
+  //   );
+  // }
+
   static async createGroupConversation(
     currentUserId: string,
     name: string,
     memberUids: string[],
+    avatarUrl: string | null = null,
   ) {
     const trimmedName = name.trim();
+
     if (!trimmedName) {
       throw new Error("Group name is required.");
     }
@@ -65,6 +99,7 @@ export class ChatService {
 
     if (Array.isArray(memberUids) && memberUids.length > 0) {
       const userPromises = memberUids.map((uid) => UserModel.findByUid(uid));
+
       const resolvedUsers = await Promise.all(userPromises);
 
       resolvedUsers.forEach((user) => {
@@ -79,6 +114,7 @@ export class ChatService {
       trimmedName,
       currentUserId,
       memberUserIds,
+      avatarUrl,
     );
   }
 
@@ -124,5 +160,27 @@ export class ChatService {
 
   static async getAllMessages() {
     return await ChatModel.getAllMessages();
+  }
+
+  static async addUserToGroup(
+    conversationId: string,
+    currentUserId: string,
+    targetUid: string,
+  ) {
+    if (!conversationId) {
+      throw new Error("conversationId is required.");
+    }
+    if (!currentUserId) {
+      throw new Error("currentUserId is required.");
+    }
+    if (!targetUid) {
+      throw new Error("targetUid is required.");
+    }
+
+    return await ChatModel.addUserToGroup(
+      conversationId,
+      currentUserId,
+      targetUid,
+    );
   }
 }

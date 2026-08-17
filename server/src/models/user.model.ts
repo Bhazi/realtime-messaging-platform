@@ -268,4 +268,304 @@ export class UserModel {
 
     return rows[0];
   }
+
+  /**
+   * Deletes / Dissolves a group conversation.
+   * - If the requester is the OWNER, the group is dissolved for all members.
+   * - If the requester is a MEMBER or ADMIN, they leave the group and soft-delete local view.
+   */
+  static async deleteGroupConversation(conversationId: string, userId: string) {
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      // 1. Fetch conversation & verify it is a GROUP
+      const convQuery = `
+        SELECT id, type, created_by 
+        FROM conversations 
+        WHERE id = $1;
+      `;
+      const convRes = await client.query(convQuery, [conversationId]);
+
+      if (convRes.rows.length === 0) {
+        throw new Error("Conversation not found.");
+      }
+
+      const conversation = convRes.rows[0];
+
+      if (conversation.type !== "GROUP") {
+        throw new Error(
+          "This operation is only valid for GROUP conversations.",
+        );
+      }
+
+      // 2. Fetch actor membership details
+      const memberQuery = `
+        SELECT role, left_at 
+        FROM conversation_members
+        WHERE conversation_id = $1 AND user_id = $2;
+      `;
+      const memberRes = await client.query(memberQuery, [
+        conversationId,
+        userId,
+      ]);
+
+      if (memberRes.rows.length === 0) {
+        throw new Error("User is not a member of this conversation.");
+      }
+
+      const actor = memberRes.rows[0];
+
+      // Check if user is the OWNER or Creator
+      const isOwner =
+        actor.role === "OWNER" || conversation.created_by === userId;
+
+      if (isOwner) {
+        // --- OWNER SCENARIO: Dissolve Group for Everyone ---
+
+        // Mark all active members as having left and hidden the chat
+        await client.query(
+          `
+            UPDATE conversation_members
+            SET 
+              left_at = CURRENT_TIMESTAMP,
+              hidden_at = CURRENT_TIMESTAMP
+            WHERE conversation_id = $1;
+          `,
+          [conversationId],
+        );
+
+        // Update conversation state (optional: add a metadata field or timestamp)
+        await client.query(
+          `UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1;`,
+          [conversationId],
+        );
+
+        await client.query("COMMIT");
+
+        return {
+          conversationId,
+          dissolved: true,
+          message: "Group dissolved successfully for all members.",
+        };
+      } else {
+        // --- MEMBER / ADMIN SCENARIO: Leave & Clear for Self ---
+        await client.query(
+          `
+            UPDATE conversation_members
+            SET 
+              left_at = CURRENT_TIMESTAMP,
+              hidden_at = CURRENT_TIMESTAMP
+              WHERE conversation_id = $1 AND user_id = $2;
+          `,
+          [conversationId, userId],
+        );
+
+        await client.query("COMMIT");
+
+        return {
+          conversationId,
+          dissolved: false,
+          message: "You have left and deleted the group for yourself.",
+        };
+      }
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Updates a member's role in a group conversation.
+   * Only the OWNER can change roles.
+   */
+  static async updateGroupMemberRole(
+    conversationId: string,
+    actorUserId: string,
+    targetUserId: string,
+    newRole: string,
+  ) {
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      // 1. Verify the conversation is a GROUP
+      const convQuery = `SELECT type FROM conversations WHERE id = $1;`;
+      const convRes = await client.query(convQuery, [conversationId]);
+
+      if (convRes.rows.length === 0) {
+        throw new Error("Conversation not found.");
+      }
+      if (convRes.rows[0].type !== "GROUP") {
+        throw new Error(
+          "Role management is only valid for GROUP conversations.",
+        );
+      }
+
+      // 2. Fetch actor's membership and role
+      const actorQuery = `
+        SELECT role, left_at 
+        FROM conversation_members 
+        WHERE conversation_id = $1 AND user_id = $2;
+      `;
+      const actorRes = await client.query(actorQuery, [
+        conversationId,
+        actorUserId,
+      ]);
+
+      if (actorRes.rows.length === 0 || actorRes.rows[0].left_at !== null) {
+        throw new Error("Actor is not an active member of this conversation.");
+      }
+
+      const actorRole = actorRes.rows[0].role;
+      if (actorRole !== "OWNER") {
+        throw new Error("Only the group owner can manage member roles.");
+      }
+
+      // 3. Fetch target user's membership
+      const targetQuery = `
+        SELECT role, left_at 
+        FROM conversation_members 
+        WHERE conversation_id = $1 AND user_id = $2;
+      `;
+      const targetRes = await client.query(targetQuery, [
+        conversationId,
+        targetUserId,
+      ]);
+
+      if (targetRes.rows.length === 0 || targetRes.rows[0].left_at !== null) {
+        throw new Error("Target user is not an active member of this group.");
+      }
+
+      // 4. Update the target member's role
+      const updateQuery = `
+        UPDATE conversation_members
+        SET role = $1
+        WHERE conversation_id = $2 AND user_id = $3
+        RETURNING conversation_id, user_id, role, joined_at;
+      `;
+      const updateRes = await client.query(updateQuery, [
+        newRole,
+        conversationId,
+        targetUserId,
+      ]);
+
+      await client.query("COMMIT");
+
+      return updateRes.rows[0];
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Removes a user from a group conversation.
+   * Enforces role permissions:
+   * - Actor must be OWNER or ADMIN.
+   * - ADMINs cannot remove OWNERs or other ADMINs.
+   */
+  static async removeUserFromGroup(
+    conversationId: string,
+    actorUserId: string,
+    targetUserId: string,
+  ) {
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      // 1. Verify the conversation is a GROUP
+      const convQuery = `SELECT type FROM conversations WHERE id = $1;`;
+      const convRes = await client.query(convQuery, [conversationId]);
+
+      if (convRes.rows.length === 0) {
+        throw new Error("Conversation not found.");
+      }
+      if (convRes.rows[0].type !== "GROUP") {
+        throw new Error(
+          "Removing members is only valid for GROUP conversations.",
+        );
+      }
+
+      // 2. Fetch actor's membership and role
+      const actorQuery = `
+        SELECT role, left_at 
+        FROM conversation_members 
+        WHERE conversation_id = $1 AND user_id = $2;
+      `;
+      const actorRes = await client.query(actorQuery, [
+        conversationId,
+        actorUserId,
+      ]);
+
+      if (actorRes.rows.length === 0 || actorRes.rows[0].left_at !== null) {
+        throw new Error("You are not an active member of this group.");
+      }
+
+      const actorRole = actorRes.rows[0].role;
+
+      // Only OWNER or ADMIN can remove users
+      if (actorRole !== "OWNER" && actorRole !== "ADMIN") {
+        throw new Error("Only admins or owners can remove members.");
+      }
+
+      // 3. Fetch target user's membership and role
+      const targetQuery = `
+        SELECT role, left_at 
+        FROM conversation_members 
+        WHERE conversation_id = $1 AND user_id = $2;
+      `;
+      const targetRes = await client.query(targetQuery, [
+        conversationId,
+        targetUserId,
+      ]);
+
+      if (targetRes.rows.length === 0 || targetRes.rows[0].left_at !== null) {
+        throw new Error("Target user is not an active member of this group.");
+      }
+
+      const targetRole = targetRes.rows[0].role;
+
+      // Admins cannot remove owners or other admins
+      if (actorRole === "ADMIN") {
+        if (targetRole === "OWNER" || targetRole === "ADMIN") {
+          throw new Error("Admins cannot remove owners or other admins.");
+        }
+      }
+
+      // 4. Update left_at timestamp for target user
+      const removeQuery = `
+        UPDATE conversation_members
+        SET left_at = CURRENT_TIMESTAMP
+        WHERE conversation_id = $1 AND user_id = $2
+        RETURNING conversation_id, user_id, role, left_at;
+      `;
+      const removeRes = await client.query(removeQuery, [
+        conversationId,
+        targetUserId,
+      ]);
+
+      // 5. Update conversation timestamp
+      await client.query(
+        `UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1;`,
+        [conversationId],
+      );
+
+      await client.query("COMMIT");
+
+      return removeRes.rows[0];
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 }

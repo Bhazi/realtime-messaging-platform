@@ -107,37 +107,136 @@ export class ChatController {
     }
   }
 
+  // static async createGroupConversation(
+  //   req: Request,
+  //   res: Response,
+  // ): Promise<void> {
+  //   try {
+  //     const { name, memberUids, currentUserId: bodyUserId } = req.body;
+  //     const currentUserId = (req as any).user?.id || bodyUserId;
+
+  //     if (!currentUserId) {
+  //       res
+  //         .status(401)
+  //         .json({ error: "Unauthorized: currentUserId is required." });
+  //       return;
+  //     }
+
+  //     if (!name || typeof name !== "string") {
+  //       res.status(400).json({ error: "Group name is required." });
+  //       return;
+  //     }
+
+  //     const conversation = await ChatService.createGroupConversation(
+  //       currentUserId,
+  //       name,
+  //       memberUids || [],
+  //     );
+
+  //     res.status(201).json({
+  //       message: "Group conversation created successfully.",
+  //       conversation,
+  //     });
+  //   } catch (err: any) {
+  //     res.status(400).json({
+  //       error: err.message || "Failed to create group conversation.",
+  //     });
+  //   }
+  // }
+
   static async createGroupConversation(
     req: Request,
     res: Response,
   ): Promise<void> {
     try {
-      const { name, memberUids, currentUserId: bodyUserId } = req.body;
+      const {
+        groupName: name,
+        addedUids: bodyMemberUids,
+        userId: bodyUserId,
+      } = req.body;
+
+      console.log(req.body);
+
       const currentUserId = (req as any).user?.id || bodyUserId;
 
+      // --------------------------------------------------
+      // 1. Authenticate user
+      // --------------------------------------------------
       if (!currentUserId) {
-        res
-          .status(401)
-          .json({ error: "Unauthorized: currentUserId is required." });
+        res.status(401).json({
+          error: "Unauthorized: currentUserId is required.",
+        });
         return;
       }
 
+      // --------------------------------------------------
+      // 2. Validate group name
+      // --------------------------------------------------
       if (!name || typeof name !== "string") {
-        res.status(400).json({ error: "Group name is required." });
+        res.status(400).json({
+          error: "Group name is required.",
+        });
         return;
       }
 
+      // --------------------------------------------------
+      // 3. Parse memberUids
+      // --------------------------------------------------
+      let memberUids: string[] = [];
+
+      if (bodyMemberUids) {
+        try {
+          memberUids =
+            typeof bodyMemberUids === "string"
+              ? JSON.parse(bodyMemberUids)
+              : bodyMemberUids;
+        } catch {
+          res.status(400).json({
+            error: "Invalid memberUids format.",
+          });
+          return;
+        }
+      }
+
+      // Make sure it is actually an array
+      if (!Array.isArray(memberUids)) {
+        res.status(400).json({
+          error: "memberUids must be an array.",
+        });
+        return;
+      }
+
+      // --------------------------------------------------
+      // 4. Get uploaded group image
+      // --------------------------------------------------
+      const file = req.file;
+
+      let avatarUrl: string | null = null;
+
+      if (file) {
+        avatarUrl = `/uploads/group-images/${file.filename}`;
+      }
+
+      // --------------------------------------------------
+      // 5. Create group
+      // --------------------------------------------------
       const conversation = await ChatService.createGroupConversation(
         currentUserId,
         name,
-        memberUids || [],
+        memberUids,
+        avatarUrl,
       );
 
+      // --------------------------------------------------
+      // 6. Response
+      // --------------------------------------------------
       res.status(201).json({
         message: "Group conversation created successfully.",
         conversation,
       });
     } catch (err: any) {
+      console.error("Create group conversation error:", err);
+
       res.status(400).json({
         error: err.message || "Failed to create group conversation.",
       });
@@ -207,6 +306,38 @@ export class ChatController {
       res.status(500).json({
         error: err.message || "Failed to fetch all messages.",
       });
+    }
+  }
+
+  static async addUserToGroup(req: Request, res: Response): Promise<void> {
+    try {
+      const { conversationId, currentUserId: bodyUserId, targetUid } = req.body;
+      const currentUserId = (req as any).user?.id || bodyUserId;
+
+      if (!currentUserId) {
+        res.status(400).json({ error: "currentUserId is required." });
+        return;
+      }
+
+      const result = await ChatService.addUserToGroup(
+        conversationId,
+        currentUserId,
+        targetUid,
+      );
+
+      res.status(200).json({
+        message: "User successfully added to group.",
+        data: result,
+      });
+    } catch (err: any) {
+      const msg = err.message || "Failed to add user to group.";
+      let statusCode = 400;
+
+      if (msg.includes("does not exist")) statusCode = 404;
+      if (msg.includes("Conversation not found")) statusCode = 404;
+      if (msg.includes("Only admins or owners")) statusCode = 403;
+
+      res.status(statusCode).json({ error: msg });
     }
   }
 }

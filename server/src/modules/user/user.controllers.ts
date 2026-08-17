@@ -155,4 +155,121 @@ export class UserController {
       });
     }
   }
+
+  /**
+   * DELETE /api/v1/chat/group/:conversationId
+   */
+  static async deleteGroupConversation(
+    req: Request,
+    res: Response,
+  ): Promise<void> {
+    try {
+      const { conversationId } = req.params;
+      const currentUserId = (req as any).user?.id || req.body?.currentUserId;
+
+      console.log(req.body, conversationId, currentUserId);
+
+      if (!currentUserId) {
+        res.status(400).json({ error: "currentUserId is required." });
+        return;
+      }
+
+      const result = await UserService.deleteGroupConversation(
+        conversationId,
+        currentUserId,
+      );
+
+      // Socket event emission if real-time notifications are enabled
+      // if (result.dissolved) {
+      //   io.to(conversationId).emit("group_dissolved", { conversationId });
+      // }
+
+      res.status(200).json({
+        message: result.message,
+        data: result,
+      });
+    } catch (err: any) {
+      let statusCode = 400;
+      if (err.message.includes("not found")) statusCode = 404;
+
+      res
+        .status(statusCode)
+        .json({ error: err.message || "Failed to delete group." });
+    }
+  }
+
+  /**
+   * PATCH /api/v1/chat/groups/:conversationId/members/role
+   */
+  static async updateGroupMemberRole(
+    req: Request,
+    res: Response,
+  ): Promise<void> {
+    try {
+      const { conversationId } = req.params;
+      const { actorUserId, targetUserId, newRole } = req.body;
+
+      // Alternatively, extract actorUserId from authenticated session/JWT middleware:
+      // const actorUserId = (req as any).user?.id;
+
+      const updatedMember = await UserService.updateGroupMemberRole(
+        conversationId,
+        actorUserId,
+        targetUserId,
+        newRole,
+      );
+
+      res.status(200).json({
+        message: `Role updated to ${newRole} successfully.`,
+        data: updatedMember,
+      });
+    } catch (err: any) {
+      let statusCode = 400;
+      if (err.message.includes("owner")) statusCode = 403;
+      if (err.message.includes("not found")) statusCode = 404;
+
+      res
+        .status(statusCode)
+        .json({ error: err.message || "Failed to update role." });
+    }
+  }
+
+  /**
+   * DELETE /api/v1/chat/groups/:conversationId/members/:targetUserId
+   */
+  static async removeUserFromGroup(req: Request, res: Response): Promise<void> {
+    try {
+      const { conversationId, targetUserId } = req.params;
+      const { actorUserId } = req.body;
+
+      // Alternatively, extract actorUserId from authenticated request context:
+      // const actorUserId = (req as any).user?.id;
+
+      const removedMember = await UserService.removeUserFromGroup(
+        conversationId,
+        actorUserId,
+        targetUserId,
+      );
+
+      res.status(200).json({
+        message: "User removed from group successfully.",
+        data: removedMember,
+      });
+    } catch (err: any) {
+      let statusCode = 400;
+      if (
+        err.message.includes("admins or owners") ||
+        err.message.includes("cannot remove")
+      ) {
+        statusCode = 403;
+      }
+      if (err.message.includes("not found")) {
+        statusCode = 404;
+      }
+
+      res
+        .status(statusCode)
+        .json({ error: err.message || "Failed to remove member." });
+    }
+  }
 }

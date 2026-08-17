@@ -44,4 +44,60 @@ export class UserService {
   static async updateAvatar(userId: string, avatarUrl: string) {
     return await UserModel.updateAvatarUrl(userId, avatarUrl);
   }
+
+  static async deleteGroupConversation(conversationId: string, userId: string) {
+    if (!conversationId || !userId) {
+      throw new Error("conversationId and userId are required.");
+    }
+
+    return await UserModel.deleteGroupConversation(conversationId, userId);
+  }
+
+  static async updateGroupMemberRole(
+    conversationId: string,
+    actorUserId: string,
+    targetUserId: string,
+    newRole: string,
+  ) {
+    if (!conversationId || !actorUserId || !targetUserId || !newRole) {
+      throw new Error(
+        "conversationId, actorUserId, targetUserId, and newRole are required.",
+      );
+    }
+
+    // Optional validation for accepted enums if applicable
+    const validRoles = ["ADMIN", "MEMBER"];
+    if (!validRoles.includes(newRole)) {
+      throw new Error("Invalid role specified.");
+    }
+
+    return await UserModel.updateGroupMemberRole(
+      conversationId,
+      actorUserId,
+      targetUserId,
+      newRole,
+    );
+  }
+
+  static async removeUserFromGroup(
+    conversationId: string,
+    actorUserId: string,
+    targetUserId: string,
+  ) {
+    if (!conversationId || !actorUserId || !targetUserId) {
+      throw new Error(
+        "conversationId, actorUserId, and targetUserId are required.",
+      );
+    }
+
+    if (actorUserId === targetUserId) {
+      throw new Error("Use the leave group endpoint to remove yourself.");
+    }
+
+    return await UserModel.removeUserFromGroup(
+      conversationId,
+      actorUserId,
+      targetUserId,
+    );
+  }
 }
