@@ -37,7 +37,9 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
   const isOwner = currentUserMember?.role === "OWNER";
   const isAdmin = currentUserMember?.role === "ADMIN" || isOwner;
 
-  const handleAddMember = (e: React.FormEvent) => {
+  console.log("group member component rendered");
+
+  const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
     setSuccessMsg("");
@@ -45,7 +47,7 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
     if (!newUidInput.trim()) return;
 
     try {
-      messengerStore.addUserToGroup(
+      await messengerStore.addUserToGroup(
         conversation.id,
         currentUserId,
         newUidInput.trim(),
@@ -58,12 +60,12 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
     }
   };
 
-  const handleRemoveMember = (targetUserId: string) => {
+  const handleRemoveMember = async (targetUserId: string) => {
     setErrorMsg("");
     setSuccessMsg("");
 
     try {
-      messengerStore.removeUserFromGroup(
+      await messengerStore.removeUserFromGroup(
         conversation.id,
         currentUserId,
         targetUserId,
@@ -75,12 +77,15 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
     }
   };
 
-  const handleRoleChange = (targetUserId: string, newRole: MemberRole) => {
+  const handleRoleChange = async (
+    targetUserId: string,
+    newRole: MemberRole,
+  ) => {
     setErrorMsg("");
     setSuccessMsg("");
 
     try {
-      messengerStore.updateGroupMemberRole(
+      await messengerStore.updateGroupMemberRole(
         conversation.id,
         currentUserId,
         targetUserId,
@@ -170,8 +175,7 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
             {/* Members List */}
             <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
               {activeMembers.map((member) => {
-                const user =
-                  member.user || messengerStore.getUserById(member.userId);
+                const user = member.user;
                 const isSelf = member.userId === currentUserId;
 
                 return (
@@ -181,10 +185,7 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
                   >
                     <div className="flex items-center gap-3">
                       <img
-                        src={
-                          user?.avatarUrl ||
-                          "https://images.unsplash.com/photo-1534528741775-53994a69daeb"
-                        }
+                        src={`http://localhost:5000${user?.avatarUrl}`}
                         alt={user?.displayName || "Member"}
                         className="w-10 h-10 rounded-full object-cover border border-zinc-700"
                       />

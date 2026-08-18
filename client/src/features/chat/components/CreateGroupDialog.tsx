@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { FolderPlus, X, Plus, Trash2, Users } from "lucide-react";
 import { messengerStore } from "../../../messangerStore/messengerStore";
@@ -22,33 +22,64 @@ export const CreateGroupDialog: React.FC<CreateGroupDialogProps> = ({
   const [addedUids, setAddedUids] = useState<string[]>([]);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const handleAddUid = () => {
+  // Add Image for Profile Picture
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAddUid = async () => {
     setErrorMsg("");
     const cleanUid = memberUidInput.trim().toUpperCase();
     if (!cleanUid) return;
 
-    const user = messengerStore.getUserByUid(cleanUid);
+    console.log("reached here 1");
+
+    const user = await messengerStore.getUserByUid(cleanUid);
     if (!user) {
       setErrorMsg(`No user found with UID "${cleanUid}".`);
       return;
     }
+
+    console.log(user, "from the handledAddedUID function 2");
 
     if (user.id === currentUserId) {
       setErrorMsg("You are automatically included as group Owner.");
       return;
     }
 
+    console.log(user, "from the handledAddedUID function 3");
+
     if (addedUids.includes(cleanUid)) {
       setErrorMsg("User UID already added to list.");
       return;
     }
 
+    console.log(user, "from the handledAddedUID function 4");
+
     setAddedUids([...addedUids, cleanUid]);
     setMemberUidInput("");
+
+    console.log(user, "from the handledAddedUID function 5");
   };
 
   const handleRemoveUid = (uid: string) => {
     setAddedUids(addedUids.filter((u) => u !== uid));
+  };
+
+  // Select image
+  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    // Optional: only allow images
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image file.");
+      return;
+    }
+
+    setSelectedImage(file);
+    // setPreviewUrl(URL.createObjectURL(file));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -60,12 +91,22 @@ export const CreateGroupDialog: React.FC<CreateGroupDialogProps> = ({
       return;
     }
 
+    const formData = new FormData();
+
+    formData.append("userId", currentUserId);
+    formData.append("groupName", groupName);
+
+    // Convert array to JSON string
+    formData.append("addedUids", JSON.stringify(addedUids));
+
+    if (selectedImage) {
+      formData.append("groupImage", selectedImage);
+    }
+    console.log(currentUserId, "from the create group dialogue component");
+
     try {
-      const newGroup = await messengerStore.createGroupConversation(
-        currentUserId,
-        groupName,
-        addedUids,
-      );
+      const newGroup = await messengerStore.createGroupConversation(formData);
+
       onGroupCreated(newGroup);
       handleClose();
     } catch (err: any) {
@@ -78,6 +119,7 @@ export const CreateGroupDialog: React.FC<CreateGroupDialogProps> = ({
     setMemberUidInput("");
     setAddedUids([]);
     setErrorMsg("");
+    setSelectedImage(null);
     onClose();
   };
 
@@ -150,23 +192,66 @@ export const CreateGroupDialog: React.FC<CreateGroupDialogProps> = ({
                 </div>
               </div>
 
+              {/* Add Profile Picture for Group */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-zinc-300">
+                  Profile Picture
+                </label>
+
+                <div className="flex items-center gap-4">
+                  {/* Preview */}
+                  <div className="w-16 h-16 rounded-full bg-zinc-950 border border-zinc-800 overflow-hidden flex items-center justify-center shrink-0">
+                    {selectedImage ? (
+                      <img
+                        src={URL.createObjectURL(selectedImage)}
+                        alt="Group profile preview"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-zinc-600 text-xs">No Image</span>
+                    )}
+                  </div>
+
+                  {/* Upload */}
+                  <div className="flex-1">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageChange}
+                      className="block w-full text-sm text-zinc-400
+                        file:mr-3 file:py-2 file:px-3
+                        file:rounded-lg file:border-0
+                        file:text-xs file:font-medium
+                        file:shadow-lg file:shadow-indigo-600/30
+                        file:bg-indigo-600 file:text-white
+                        hover:file:bg-indigo-500
+                        file:cursor-pointer"
+                    />
+
+                    <p className="mt-1.5 text-xs text-zinc-600">
+                      PNG, JPG or WEBP. Recommended size: 512×512.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {/* Added Members List Chips */}
               {addedUids.length > 0 && (
                 <div className="space-y-1.5">
                   <span className="text-[11px] font-medium text-zinc-400">
-                    Selected Members ({addedUids.length}):
+                    Selected Members ( {addedUids.length} ) :
                   </span>
                   <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2 bg-zinc-950/60 rounded-xl border border-zinc-800">
                     {addedUids.map((uid) => {
+                      console.log(uid);
                       const user = messengerStore.getUserByUid(uid);
                       return (
                         <div
                           key={uid}
                           className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-200"
                         >
-                          <span className="font-medium">
-                            {user?.displayName || uid}
-                          </span>
+                          <span className="font-medium">{uid}</span>
                           <span className="text-[10px] text-zinc-400 font-mono">
                             ({uid})
                           </span>

@@ -8,7 +8,7 @@ import {
   Send,
   Plus,
 } from "lucide-react";
-import { Conversation, MessageType, User } from "../../../types/types";
+import { Conversation, MessageType, Message, User } from "../../../types/types";
 import { MessageList } from "./MessageList";
 import { FileUploadModal } from "./FileUploadModal";
 import { GroupMembersModal } from "./GroupMembersModal";
@@ -35,10 +35,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   // const messages = messengerStore.getMessages(conversation.id);
 
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState<Message[]>([]);
 
   useEffect(() => {
     const fetchMessages = async () => {
+      console.log("the chat area rendered from the chat area component");
       const result = await messengerStore.getMessages(conversation.id);
       setMessages(result);
     };
@@ -76,20 +77,23 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     onRefresh();
   };
 
-  const handleDeleteMessage = (messageId: string) => {
+  const handleDeleteMessage = async (messageId: string) => {
     try {
-      messengerStore.deleteMessage(messageId, currentUser.id);
+      await messengerStore.deleteMessage(messageId, currentUser.id);
       onRefresh();
     } catch (err: any) {
       alert(err.message || "Cannot delete message.");
     }
   };
 
-  const handleDeleteConversation = () => {
+  const handleDeleteConversation = async () => {
     if (
       confirm("Are you sure you want to remove this chat from your account?")
     ) {
-      messengerStore.deleteConversationForUser(conversation.id, currentUser.id);
+      await messengerStore.deleteGroupConversation(
+        conversation.id,
+        currentUser.id,
+      );
       onRefresh();
     }
   };
@@ -100,10 +104,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       <div className="px-6 py-4 bg-zinc-950/90 border-b border-zinc-800/80 flex items-center justify-between z-10 backdrop-blur-md">
         <div className="flex items-center gap-3">
           <img
-            src={
-              conversation.avatarUrl ||
-              "https://images.unsplash.com/photo-1534528741775-53994a69daeb"
-            }
+            src={`http://localhost:5000${conversation.avatarUrl}`}
             alt={conversation.name}
             className="w-10 h-10 rounded-full object-cover border border-zinc-700"
           />

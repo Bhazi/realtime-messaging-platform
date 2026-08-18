@@ -17,6 +17,8 @@ export default function App() {
     setCurrentUser(user);
   };
 
+  console.log(currentUser, "from the app component");
+
   const handleLogout = () => {
     setCurrentUser(null);
     localStorage.removeItem("luma_user");
@@ -71,6 +73,7 @@ export default function App() {
               <MessengerLayout
                 currentUser={currentUser}
                 onLogout={handleLogout}
+                onCurrentUserChange={setCurrentUser}
               />
             ) : (
               <Navigate to="/login" replace />
@@ -85,6 +88,7 @@ export default function App() {
               <MessengerLayout
                 currentUser={currentUser}
                 onLogout={handleLogout}
+                onCurrentUserChange={setCurrentUser}
               />
             ) : (
               <Navigate to="/login" replace />
@@ -99,6 +103,7 @@ export default function App() {
               <MessengerLayout
                 currentUser={currentUser}
                 onLogout={handleLogout}
+                onCurrentUserChange={setCurrentUser}
               />
             ) : (
               <Navigate to="/login" replace />

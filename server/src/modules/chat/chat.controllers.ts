@@ -1,50 +1,3 @@
-// import { Request, Response } from "express";
-// import { ChatService } from "./chat.services.js";
-
-// export class ChatController {
-//   static async createDirectConversation(req: Request, res: Response): Promise {
-//     try {
-//       const { targetUid } = req.body;
-//       // Extract logged-in user ID from JWT middleware (or request body during local testing)
-//       const currentUserId = (req as any).user?.id || req.body.currentUserId;
-
-//       console.log(currentUserId, "current", targetUid, "targetUID");
-
-//       if (!targetUid) {
-//         res.status(400).json({ error: "targetUid is required." });
-//         return;
-//       }
-
-//       const conversation = await ChatService.createDirectConversation(
-//         currentUserId,
-//         targetUid,
-//       );
-
-//       res.status(200).json({
-//         message: "Conversation ready",
-//         conversation: {
-//           id: conversation.id,
-//           type: conversation.type,
-//           createdBy: conversation.created_by,
-//           createdAt: conversation.created_at,
-//           updatedAt: conversation.updated_at,
-//           members: conversation.members.map((m) => ({
-//             conversationId: m.conversation_id,
-//             userId: m.user_id,
-//             role: m.role,
-//             joinedAt: m.joined_at,
-//             hiddenAt: m.hidden_at,
-//           })),
-//         },
-//       });
-//     } catch (err: any) {
-//       res
-//         .status(400)
-//         .json({ error: err.message || "Failed to create conversation." });
-//     }
-//   }
-// }
-
 import { Request, Response } from "express";
 import { ChatService } from "./chat.services.js";
 
@@ -107,43 +60,6 @@ export class ChatController {
     }
   }
 
-  // static async createGroupConversation(
-  //   req: Request,
-  //   res: Response,
-  // ): Promise<void> {
-  //   try {
-  //     const { name, memberUids, currentUserId: bodyUserId } = req.body;
-  //     const currentUserId = (req as any).user?.id || bodyUserId;
-
-  //     if (!currentUserId) {
-  //       res
-  //         .status(401)
-  //         .json({ error: "Unauthorized: currentUserId is required." });
-  //       return;
-  //     }
-
-  //     if (!name || typeof name !== "string") {
-  //       res.status(400).json({ error: "Group name is required." });
-  //       return;
-  //     }
-
-  //     const conversation = await ChatService.createGroupConversation(
-  //       currentUserId,
-  //       name,
-  //       memberUids || [],
-  //     );
-
-  //     res.status(201).json({
-  //       message: "Group conversation created successfully.",
-  //       conversation,
-  //     });
-  //   } catch (err: any) {
-  //     res.status(400).json({
-  //       error: err.message || "Failed to create group conversation.",
-  //     });
-  //   }
-  // }
-
   static async createGroupConversation(
     req: Request,
     res: Response,
@@ -159,9 +75,6 @@ export class ChatController {
 
       const currentUserId = (req as any).user?.id || bodyUserId;
 
-      // --------------------------------------------------
-      // 1. Authenticate user
-      // --------------------------------------------------
       if (!currentUserId) {
         res.status(401).json({
           error: "Unauthorized: currentUserId is required.",
@@ -169,9 +82,6 @@ export class ChatController {
         return;
       }
 
-      // --------------------------------------------------
-      // 2. Validate group name
-      // --------------------------------------------------
       if (!name || typeof name !== "string") {
         res.status(400).json({
           error: "Group name is required.",
@@ -179,9 +89,6 @@ export class ChatController {
         return;
       }
 
-      // --------------------------------------------------
-      // 3. Parse memberUids
-      // --------------------------------------------------
       let memberUids: string[] = [];
 
       if (bodyMemberUids) {
@@ -206,9 +113,6 @@ export class ChatController {
         return;
       }
 
-      // --------------------------------------------------
-      // 4. Get uploaded group image
-      // --------------------------------------------------
       const file = req.file;
 
       let avatarUrl: string | null = null;
@@ -217,9 +121,6 @@ export class ChatController {
         avatarUrl = `/uploads/group-images/${file.filename}`;
       }
 
-      // --------------------------------------------------
-      // 5. Create group
-      // --------------------------------------------------
       const conversation = await ChatService.createGroupConversation(
         currentUserId,
         name,
@@ -227,9 +128,6 @@ export class ChatController {
         avatarUrl,
       );
 
-      // --------------------------------------------------
-      // 6. Response
-      // --------------------------------------------------
       res.status(201).json({
         message: "Group conversation created successfully.",
         conversation,
@@ -338,6 +236,40 @@ export class ChatController {
       if (msg.includes("Only admins or owners")) statusCode = 403;
 
       res.status(statusCode).json({ error: msg });
+    }
+  }
+
+  /**
+   * DELETE /api/v1/chat/messages/:messageId
+   */
+  static async deleteMessage(req: Request, res: Response): Promise<void> {
+    try {
+      const { messageId } = req.params;
+      const { userId } = req.body;
+
+      if (!userId) {
+        res.status(400).json({ error: "userId is required." });
+        return;
+      }
+
+      const success = await ChatService.deleteMessage(messageId, userId);
+
+      res.status(200).json({
+        success,
+        message: "Message deleted successfully.",
+      });
+    } catch (err: any) {
+      let statusCode = 400;
+      if (err.message.includes("Permission denied")) {
+        statusCode = 403;
+      } else if (err.message.includes("not found")) {
+        statusCode = 404;
+      }
+
+      res.status(statusCode).json({
+        success: false,
+        error: err.message || "Failed to delete message.",
+      });
     }
   }
 }

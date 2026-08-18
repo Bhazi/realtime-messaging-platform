@@ -50,38 +50,6 @@ export class ChatService {
     return await ChatModel.getConversationsForUser(userId);
   }
 
-  // static async createGroupConversation(
-  //   currentUserId: string,
-  //   name: string,
-  //   memberUids: string[],
-  // ) {
-  //   const trimmedName = name.trim();
-  //   if (!trimmedName) {
-  //     throw new Error("Group name is required.");
-  //   }
-
-  //   // Resolve public_uids to internal user IDs asynchronously
-  //   const memberUserIds: string[] = [];
-
-  //   if (Array.isArray(memberUids) && memberUids.length > 0) {
-  //     const userPromises = memberUids.map((uid) => UserModel.findByUid(uid));
-  //     const resolvedUsers = await Promise.all(userPromises);
-
-  //     resolvedUsers.forEach((user) => {
-  //       if (user && user.id !== currentUserId) {
-  //         memberUserIds.push(user.id);
-  //       }
-  //     });
-  //   }
-
-  //   // Create group conversation via model transaction
-  //   return await ChatModel.createGroupConversation(
-  //     trimmedName,
-  //     currentUserId,
-  //     memberUserIds,
-  //   );
-  // }
-
   static async createGroupConversation(
     currentUserId: string,
     name: string,
@@ -182,5 +150,30 @@ export class ChatService {
       currentUserId,
       targetUid,
     );
+  }
+
+  static async deleteMessage(
+    messageId: string,
+    userId: string,
+  ): Promise<boolean> {
+    if (!messageId || !userId) {
+      throw new Error("messageId and userId are required UUIDs.");
+    }
+
+    const result = await ChatModel.deleteMessage(messageId, userId);
+
+    // Asynchronous background storage cleanup for physical files (e.g., S3/Cloud Storage)
+    if (result.attachmentStorageKey) {
+      this.deleteFromStorage(result.attachmentStorageKey).catch((err) =>
+        console.error("Failed to delete file from object storage:", err),
+      );
+    }
+
+    return true;
+  }
+
+  private static async deleteFromStorage(storageKey: string): Promise<void> {
+    // Implement S3/Cloud Storage object removal here:
+    // await s3Client.deleteObject({ Bucket: BUCKET_NAME, Key: storageKey });
   }
 }

@@ -12,11 +12,13 @@ import { MessageSquare, ArrowLeft } from "lucide-react";
 interface MessengerLayoutProps {
   currentUser: User;
   onLogout: () => void;
+  onCurrentUserChange: (user: User) => void;
 }
 
 export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
   currentUser,
   onLogout,
+  onCurrentUserChange,
 }) => {
   const { conversationId } = useParams();
   const navigate = useNavigate();
@@ -31,8 +33,11 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
   const isSettings = location.pathname.includes("/settings");
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConversation, setActiveConversation] =
-    useState<Conversation | null>(null);
+  const [activeConversation, setActiveConversation] = useState<
+    Conversation | undefined
+  >(undefined);
+
+  console.log(conversations);
 
   const loadConversations = async () => {
     try {
@@ -42,8 +47,6 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
 
       if (conversationId) {
         const active = await messengerStore.getConversationById(conversationId);
-
-        console.log(active, "from active");
 
         setActiveConversation(active);
       } else {
@@ -58,8 +61,9 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
   };
 
   useEffect(() => {
+    console.log("in the messenger layout component,");
     loadConversations();
-  }, [currentUser.id, conversationId]);
+  }, [currentUser.id, conversationId, refreshKey]);
 
   const handleRefresh = () => {
     setRefreshKey((prev) => prev + 1);
@@ -128,10 +132,12 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
             currentUser={currentUser}
             onLogout={onLogout}
             onProfileUpdated={handleRefresh}
+            onCurrentUserChange={onCurrentUserChange}
           />
         ) : activeConversation ? (
           <ChatArea
             key={`${activeConversation.id}_${refreshKey}`}
+            // key={activeConversation.id}
             conversation={activeConversation}
             currentUser={currentUser}
             onRefresh={handleRefresh}

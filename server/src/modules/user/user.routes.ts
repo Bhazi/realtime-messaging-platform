@@ -37,11 +37,4 @@ router.delete(
   UserController.removeUserFromGroup,
 );
 
-// router.post(
-//   "/group",
-//   uploadGroupImage.single("groupImage"),
-//   GroupController.createGroup,
-
-// );
-
 export default router;

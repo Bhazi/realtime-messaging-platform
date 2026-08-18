@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import {
   Copy,
   Check,
@@ -11,6 +11,8 @@ import {
   User as UserIcon,
   Lock,
   Key,
+  Camera,
+  X,
 } from "lucide-react";
 import { User } from "../../../types/types";
 import { messengerStore } from "../../../messangerStore/messengerStore";
@@ -19,12 +21,14 @@ interface SettingsViewProps {
   currentUser: User;
   onLogout: () => void;
   onProfileUpdated: () => void;
+  onCurrentUserChange: (user: User) => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   currentUser,
   onLogout,
   onProfileUpdated,
+  onCurrentUserChange,
 }) => {
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
@@ -37,25 +41,116 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [newPass, setNewPass] = useState("");
   const [passSaved, setPassSaved] = useState(false);
 
+  // Change Profile Picture
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Open file picker
+  const handleCameraClick = () => {
+    setIsModalOpen(true);
+  };
+
+  // Select image
+  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    // Optional: only allow images
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image file.");
+      return;
+    }
+
+    setSelectedImage(file);
+    setPreviewUrl(URL.createObjectURL(file));
+  };
+
+  // Cancel
+  const handleCancel = () => {
+    setSelectedImage(null);
+    setPreviewUrl(null);
+    setIsModalOpen(false);
+
+    // Reset input so the same image can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  // Submit
+  const handleSubmit = async () => {
+    if (!selectedImage) return;
+
+    const formData = new FormData();
+
+    formData.append("userId", currentUser.id);
+    formData.append("avatar", selectedImage);
+
+    try {
+      const response = await fetch(
+        "http://localhost:5000/api/v1/profile/avatar",
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
+
+      // Close modal after successful upload
+      setIsModalOpen(false);
+      setSelectedImage(null);
+      setPreviewUrl(null);
+
+      const data = await response.json();
+
+      messengerStore.setCurrentUser(data.user);
+
+      onCurrentUserChange(data.user);
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    } catch (error) {
+      console.error("Failed to upload profile picture:", error);
+    }
+  };
+
   const handleCopyUid = () => {
     navigator.clipboard.writeText(currentUser.uid);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    messengerStore.updateUserProfile(currentUser.id, {
-      displayName: displayName.trim(),
-      username: username.trim(),
-    });
+
+    const updatedUser: User = await messengerStore.updateUserProfile(
+      currentUser.id,
+      {
+        displayName: displayName.trim(),
+        username: username.trim(),
+      },
+    );
+
+    messengerStore.setCurrentUser(updatedUser);
+
     setIsSaved(true);
-    onProfileUpdated();
+    onCurrentUserChange(updatedUser);
+
+    // onProfileUpdated();
+
     setTimeout(() => setIsSaved(false), 2000);
   };
 
-  const handleChangePassword = (e: React.FormEvent) => {
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // API calling for changing the password
+    await messengerStore.changePassword(currentUser.id, oldPass, newPass);
+
     setPassSaved(true);
     setOldPass("");
     setNewPass("");
@@ -100,20 +195,256 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           <form onSubmit={handleSaveProfile} className="space-y-4">
             <div className="flex items-center gap-4">
-              <img
-                src={currentUser.avatarUrl}
-                alt={currentUser.displayName}
-                className="w-16 h-16 rounded-full object-cover border-2 border-indigo-500/40"
-              />
+              <div className="relative">
+                <img
+                  src={`http://localhost:5000${currentUser.avatarUrl}`}
+                  alt="Avatar"
+                  // src={previewUrl || currentUser.avatarUrl}
+                  // alt={currentUser.displayName}
+                  className="w-16 h-16 rounded-full object-cover border-2 border-indigo-500/40"
+                />
+
+                <button
+                  type="button"
+                  onClick={handleCameraClick}
+                  className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-indigo-600 border-2 border-zinc-900 flex items-center justify-center text-white hover:bg-indigo-500 transition-colors shadow-md"
+                  aria-label="Change profile picture"
+                >
+                  <Camera size={14} strokeWidth={2.5} />
+                </button>
+
+                {/* Hidden file input */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageChange}
+                />
+              </div>
+
               <div>
                 <span className="text-xs font-semibold text-white block">
                   {currentUser.displayName}
                 </span>
+
                 <span className="text-xs text-zinc-400">
                   @{currentUser.username}
                 </span>
               </div>
             </div>
+
+            {/* Modal */}
+            <AnimatePresence>
+              {isModalOpen && (
+                <motion.div
+                  className="
+              fixed inset-0 z-50
+              flex items-center justify-center
+              bg-black/60 backdrop-blur-sm
+              p-4
+            "
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={handleCancel}
+                >
+                  {/* Modal content */}
+                  <motion.div
+                    className="
+                w-full max-w-md
+                rounded-2xl
+                bg-zinc-900
+                border border-zinc-800
+                shadow-2xl
+                p-6
+              "
+                    initial={{
+                      opacity: 0,
+                      scale: 0.9,
+                      y: 20,
+                    }}
+                    animate={{
+                      opacity: 1,
+                      scale: 1,
+                      y: 0,
+                    }}
+                    exit={{
+                      opacity: 0,
+                      scale: 0.9,
+                      y: 20,
+                    }}
+                    transition={{
+                      type: "spring",
+                      stiffness: 300,
+                      damping: 25,
+                    }}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-6">
+                      <div>
+                        <h2 className="text-lg font-semibold text-white">
+                          Change Profile Picture
+                        </h2>
+
+                        <p className="text-sm text-zinc-400 mt-1">
+                          Choose a new profile picture.
+                        </p>
+                      </div>
+
+                      <motion.button
+                        type="button"
+                        onClick={handleCancel}
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        className="
+                    w-8 h-8
+                    rounded-full
+                    flex items-center justify-center
+                    text-zinc-400
+                    hover:text-white
+                    hover:bg-zinc-800
+                    transition-colors
+                  "
+                        aria-label="Close"
+                      >
+                        <X size={18} />
+                      </motion.button>
+                    </div>
+
+                    {/* Preview */}
+                    <div className="flex flex-col items-center">
+                      <AnimatePresence mode="wait">
+                        {previewUrl ? (
+                          <motion.img
+                            key="preview"
+                            src={previewUrl}
+                            alt="Selected profile"
+                            className="
+                        w-32 h-32
+                        rounded-full
+                        object-cover
+                        border-4
+                        border-indigo-500/30
+                        shadow-xl
+                        mb-5
+                      "
+                            initial={{
+                              opacity: 0,
+                              scale: 0.7,
+                            }}
+                            animate={{
+                              opacity: 1,
+                              scale: 1,
+                            }}
+                            exit={{
+                              opacity: 0,
+                              scale: 0.7,
+                            }}
+                            transition={{
+                              type: "spring",
+                              stiffness: 300,
+                              damping: 20,
+                            }}
+                          />
+                        ) : (
+                          <motion.div
+                            key="empty"
+                            className="
+                        w-32 h-32
+                        rounded-full
+                        bg-zinc-800
+                        border-2
+                        border-dashed
+                        border-zinc-700
+                        flex flex-col
+                        items-center justify-center
+                        text-zinc-500
+                        mb-5
+                      "
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                          >
+                            <Camera size={30} />
+
+                            <span className="text-xs mt-2">No image</span>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
+                      {/* Choose image */}
+                      <motion.button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        whileHover={{ scale: 1.03 }}
+                        whileTap={{ scale: 0.97 }}
+                        className="
+                    px-4 py-2
+                    rounded-lg
+                    bg-zinc-800
+                    text-sm
+                    font-medium
+                    text-white
+                    hover:bg-zinc-700
+                    transition-colors
+                  "
+                      >
+                        Choose Image
+                      </motion.button>
+
+                      <p className="text-xs text-zinc-500 mt-3">
+                        JPG, PNG or GIF
+                      </p>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="flex justify-end gap-3 mt-8">
+                      <motion.button
+                        type="button"
+                        onClick={handleCancel}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.97 }}
+                        className="
+                    px-4 py-2
+                    rounded-lg
+                    text-sm
+                    font-medium
+                    text-zinc-300
+                    bg-zinc-800
+                    hover:bg-zinc-700
+                    transition-colors
+                  "
+                      >
+                        Cancel
+                      </motion.button>
+
+                      <motion.button
+                        type="button"
+                        onClick={handleSubmit}
+                        disabled={!selectedImage}
+                        whileHover={selectedImage ? { scale: 1.02 } : undefined}
+                        whileTap={selectedImage ? { scale: 0.97 } : undefined}
+                        className="
+                    px-5 py-2
+                    rounded-lg
+                    text-sm
+                    font-semibold
+                    text-white
+                    bg-indigo-600
+                    hover:bg-indigo-500
+                    disabled:opacity-40
+                    disabled:cursor-not-allowed
+                    transition-colors
+                  "
+                      >
+                        Submit
+                      </motion.button>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Display Name */}
             <div className="space-y-1.5">

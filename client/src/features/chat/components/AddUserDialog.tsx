@@ -159,7 +159,7 @@ export const AddUserDialog: React.FC<AddUserDialogProps> = ({
               >
                 <div className="flex items-center gap-3">
                   <img
-                    src={searchedUser.avatarUrl}
+                    src={`http://localhost:5000${searchedUser.avatarUrl}`}
                     alt={searchedUser.displayName}
                     className="w-11 h-11 rounded-full object-cover border border-zinc-700"
                   />

@@ -76,10 +76,7 @@ export const MessageList: React.FC<MessageListProps> = ({
             >
               {/* Sender Avatar */}
               <img
-                src={
-                  msg.sender?.avatarUrl ||
-                  "https://images.unsplash.com/photo-1534528741775-53994a69daeb"
-                }
+                src={`http://localhost:5000${msg.sender?.avatarUrl}`}
                 alt={msg.sender?.displayName || "Sender"}
                 className="w-8 h-8 rounded-full object-cover border border-zinc-700 flex-shrink-0 mt-1"
               />

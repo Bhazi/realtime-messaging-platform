@@ -306,63 +306,6 @@ export class ChatModel {
   /**
    * Creates a GROUP conversation and inserts all members within a single transaction.
    */
-  // static async createGroupConversation(
-  //   name: string,
-  //   createdBy: string,
-  //   memberUserIds: string[],
-  // ) {
-  //   const client = await pool.connect();
-
-  //   try {
-  //     await client.query("BEGIN");
-
-  //     // 1. Insert the group conversation
-  //     const insertConvQuery = `
-  //       INSERT INTO conversations (type, name, created_by)
-  //       VALUES ('GROUP', $1, $2)
-  //       RETURNING id, type, name, avatar_url AS "avatarUrl", created_by AS "createdBy", created_at AS "createdAt", updated_at AS "updatedAt";
-  //     `;
-  //     const convRes = await client.query(insertConvQuery, [name, createdBy]);
-  //     const conversation = convRes.rows[0];
-
-  //     // 2. Prepare bulk insert for group members (Creator = OWNER, others = MEMBER)
-  //     // Deduplicate member user IDs
-  //     const uniqueMemberIds = Array.from(
-  //       new Set([createdBy, ...memberUserIds]),
-  //     );
-
-  //     const memberValues: string[] = [];
-  //     const queryParams: any[] = [conversation.id];
-
-  //     uniqueMemberIds.forEach((userId, index) => {
-  //       const paramIndex = queryParams.length + 1; // Start parameters after conversation.id ($1)
-  //       const role = userId === createdBy ? "OWNER" : "MEMBER";
-
-  //       memberValues.push(`($1, $${paramIndex}, $${paramIndex + 1})`);
-  //       queryParams.push(userId, role);
-  //     });
-
-  //     const insertMembersQuery = `
-  //       INSERT INTO conversation_members (conversation_id, user_id, role)
-  //       VALUES ${memberValues.join(", ")}
-  //       RETURNING conversation_id AS "conversationId", user_id AS "userId", role, joined_at AS "joinedAt", left_at AS "leftAt", hidden_at AS "hiddenAt";
-  //     `;
-
-  //     const membersRes = await client.query(insertMembersQuery, queryParams);
-
-  //     await client.query("COMMIT");
-
-  //     return {
-  //       ...conversation,
-  //       members: membersRes.rows,
-  //     };
-  //   } catch (error) {
-  //     await client.query("ROLLBACK");
-  //     throw error;
-  //   } finally {
-  //     client.release();
-  //   }
-  // }
 
   static async createGroupConversation(
     name: string,
@@ -375,9 +318,6 @@ export class ChatModel {
     try {
       await client.query("BEGIN");
 
-      // --------------------------------------------------
-      // 1. Insert the group conversation
-      // --------------------------------------------------
       const insertConvQuery = `
       INSERT INTO conversations (
         type,
@@ -404,10 +344,6 @@ export class ChatModel {
 
       const conversation = convRes.rows[0];
 
-      // --------------------------------------------------
-      // 2. Prepare group members
-      // --------------------------------------------------
-
       const uniqueMemberIds = Array.from(
         new Set([createdBy, ...memberUserIds]),
       );
@@ -424,10 +360,6 @@ export class ChatModel {
 
         queryParams.push(userId, role);
       });
-
-      // --------------------------------------------------
-      // 3. Insert group members
-      // --------------------------------------------------
 
       const insertMembersQuery = `
       INSERT INTO conversation_members (
@@ -447,15 +379,7 @@ export class ChatModel {
 
       const membersRes = await client.query(insertMembersQuery, queryParams);
 
-      // --------------------------------------------------
-      // 4. Commit transaction
-      // --------------------------------------------------
-
       await client.query("COMMIT");
-
-      // --------------------------------------------------
-      // 5. Return conversation
-      // --------------------------------------------------
 
       return {
         ...conversation,
@@ -669,114 +593,6 @@ export class ChatModel {
   }
 
   /**
-   * Adds a user (found by targetUid) to a group conversation.
-   * Ensures actor (currentUserId) is OWNER or ADMIN.
-   */
-  // static async addUserToGroup(
-  //   conversationId: string,
-  //   currentUserId: string,
-  //   targetUid: string,
-  // ) {
-  //   const client = await pool.connect();
-
-  //   try {
-  //     await client.query("BEGIN");
-
-  //     // 1. Fetch target user by public UID
-  //     const targetUserQuery = `
-  //       SELECT id, uid, username, display_name AS "displayName"
-  //       FROM users
-  //       WHERE uid = $1;
-  //     `;
-  //     const targetUserRes = await client.query(targetUserQuery, [targetUid]);
-
-  //     if (targetUserRes.rows.length === 0) {
-  //       throw new Error("User with this UID does not exist.");
-  //     }
-
-  //     const targetUserId = targetUserRes.rows[0].id;
-
-  //     // 2. Check if actor (currentUserId) is OWNER or ADMIN of the group
-  //     const actorCheckQuery = `
-  //       SELECT role, left_at
-  //       FROM conversation_members
-  //       WHERE conversation_id = $1 AND user_id = $2;
-  //     `;
-  //     const actorRes = await client.query(actorCheckQuery, [
-  //       conversationId,
-  //       currentUserId,
-  //     ]);
-
-  //     if (actorRes.rows.length === 0) {
-  //       throw new Error("Conversation not found.");
-  //     }
-
-  //     const actorRole = actorRes.rows[0].role;
-  //     const actorLeftAt = actorRes.rows[0].left_at;
-
-  //     if (actorLeftAt || (actorRole !== "OWNER" && actorRole !== "ADMIN")) {
-  //       throw new Error("Only admins or owners can add new members.");
-  //     }
-
-  //     // 3. Check target user's existing membership status
-  //     const targetMemberQuery = `
-  //       SELECT id, left_at
-  //       FROM conversation_members
-  //       WHERE conversation_id = $1 AND user_id = $2;
-  //     `;
-  //     const targetMemberRes = await client.query(targetMemberQuery, [
-  //       conversationId,
-  //       targetUserId,
-  //     ]);
-
-  //     if (targetMemberRes.rows.length > 0) {
-  //       const existingMember = targetMemberRes.rows[0];
-
-  //       if (existingMember.left_at === null) {
-  //         throw new Error("User is already an active member of this group.");
-  //       }
-
-  //       // Re-join user if they previously left
-  //       await client.query(
-  //         `
-  //           UPDATE conversation_members
-  //           SET left_at = NULL, joined_at = NOW(), role = 'MEMBER'
-  //           WHERE conversation_id = $1 AND user_id = $2;
-  //         `,
-  //         [conversationId, targetUserId],
-  //       );
-  //     } else {
-  //       // Insert new member
-  //       await client.query(
-  //         `
-  //           INSERT INTO conversation_members (conversation_id, user_id, role, joined_at)
-  //           VALUES ($1, $2, 'MEMBER', NOW());
-  //         `,
-  //         [conversationId, targetUserId],
-  //       );
-  //     }
-
-  //     // 4. Update conversation updated_at timestamp
-  //     await client.query(
-  //       `UPDATE conversations SET updated_at = NOW() WHERE id = $1;`,
-  //       [conversationId],
-  //     );
-
-  //     await client.query("COMMIT");
-
-  //     return {
-  //       conversationId,
-  //       addedUser: targetUserRes.rows[0],
-  //     };
-  //   } catch (error) {
-  //     await client.query("ROLLBACK");
-  //     throw error;
-  //   } finally {
-  //     client.release();
-  //   }
-  // }
-
-  /**
    * Adds a user (by public UID) to a GROUP conversation.
    * Enforces that actor (currentUserId) is an active OWNER or ADMIN.
    */
@@ -893,6 +709,95 @@ export class ChatModel {
       return {
         conversationId,
         addedUser: targetUser,
+      };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Soft-deletes a message and handles optional attachment cleanup.
+   * Permissions: Original sender OR Group ADMIN/OWNER.
+   */
+  static async deleteMessage(messageId: string, userId: string) {
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      // 1. Fetch message and verify caller's membership & role
+      const checkQuery = `
+        SELECT 
+          m.id,
+          m.sender_id,
+          m.conversation_id,
+          m.deleted_at,
+          m.attachment_id,
+          ma.storage_key,
+          cm.role AS member_role,
+          cm.left_at
+        FROM messages m
+        JOIN conversation_members cm 
+          ON m.conversation_id = cm.conversation_id AND cm.user_id = $2
+        LEFT JOIN message_attachments ma ON m.attachment_id = ma.id
+        WHERE m.id = $1;
+      `;
+      const checkRes = await client.query(checkQuery, [messageId, userId]);
+
+      if (checkRes.rows.length === 0) {
+        throw new Error(
+          "Message not found or you are not a member of this conversation.",
+        );
+      }
+
+      const msg = checkRes.rows[0];
+
+      if (msg.left_at !== null) {
+        throw new Error(
+          "You are no longer an active member of this conversation.",
+        );
+      }
+
+      if (msg.deleted_at !== null) {
+        throw new Error("Message is already deleted.");
+      }
+
+      // 2. Permission check: Original Sender OR Group Admin/Owner
+      const isSender = msg.sender_id === userId;
+      const isAdminOrOwner =
+        msg.member_role === "ADMIN" || msg.member_role === "OWNER";
+
+      if (!isSender && !isAdminOrOwner) {
+        throw new Error("Permission denied to delete this message.");
+      }
+
+      // 3. Soft-delete the message and un-link attachment
+      const updateMessageQuery = `
+        UPDATE messages
+        SET 
+          deleted_at = CURRENT_TIMESTAMP,
+          content = 'This message was deleted',
+          attachment_id = NULL
+        WHERE id = $1
+        RETURNING id, conversation_id, updated_at, deleted_at;
+      `;
+      const updateRes = await client.query(updateMessageQuery, [messageId]);
+
+      // 4. Delete the message attachment record from DB if present
+      if (msg.attachment_id) {
+        await client.query(`DELETE FROM message_attachments WHERE id = $1;`, [
+          msg.attachment_id,
+        ]);
+      }
+
+      await client.query("COMMIT");
+
+      return {
+        deletedMessage: updateRes.rows[0],
+        attachmentStorageKey: msg.storage_key || null, // Returned for object storage cleanup
       };
     } catch (error) {
       await client.query("ROLLBACK");

@@ -1,6 +1,6 @@
-export type MemberRole = 'OWNER' | 'ADMIN' | 'MEMBER';
-export type ConversationType = 'DIRECT' | 'GROUP';
-export type MessageType = 'TEXT' | 'PHOTO' | 'VIDEO' | 'FILE';
+export type MemberRole = "OWNER" | "ADMIN" | "MEMBER";
+export type ConversationType = "DIRECT" | "GROUP";
+export type MessageType = "TEXT" | "PHOTO" | "VIDEO" | "FILE";
 
 export interface User {
   id: string;

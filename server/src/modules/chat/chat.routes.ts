@@ -30,4 +30,7 @@ router.get("/messages/all", ChatController.getAllMessages);
 // Add user to group endpoint
 router.post("/group/add-user", ChatController.addUserToGroup);
 
+// Soft-delete message route
+router.delete("/messages/:messageId", ChatController.deleteMessage);
+
 export default router;

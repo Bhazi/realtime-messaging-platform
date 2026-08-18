@@ -396,15 +396,6 @@ class MessengerStore {
 
   // Users
 
-  // getUsers(): User[] {
-  //   try {
-  //     const data = localStorage.getItem(this.usersKey);
-  //     return data ? JSON.parse(data) : SEED_USERS;
-  //   } catch {
-  //     return SEED_USERS;
-  //   }
-  // }
-
   async getUsers(): Promise<User[]> {
     try {
       const data = await userApi.getUsers();
@@ -415,52 +406,58 @@ class MessengerStore {
     }
   }
 
-  // getUserById(id: string): User | undefined {
-  //   return this.getUsers().find((u) => u.id === id);
-  // }
-
   async getUserById(id: string): Promise<User | undefined> {
-    const users = await this.getUsers();
+    try {
+      const response = await fetch(
+        `http://localhost:5000/api/v1/user/id/${id}`,
+        {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        },
+      );
 
-    return users.find((u) => u.id === id);
+      if (response.status === 404) return undefined;
+      if (!response.ok) throw new Error("Failed to fetch user by ID");
+
+      const result = await response.json();
+      return result.data;
+    } catch (error) {
+      console.error("Error fetching user by ID:", error);
+      return undefined;
+    }
   }
 
-  //  getUserByUid(uid: string): User | undefined {
-  //     const cleanUid = uid.trim().toUpperCase();
-
-  //     return this.getUsers().find((u) => u.uid.toUpperCase() === cleanUid);
-  //   }
-
   async getUserByUid(uid: string): Promise<User | undefined> {
-    const cleanUid = uid.trim().toUpperCase();
+    try {
+      const response = await fetch(
+        `http://localhost:5000/api/v1/users/uid/${uid}`,
+        {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        },
+      );
 
-    const users = await this.getUsers();
+      if (response.status === 404) return undefined;
+      if (!response.ok) throw new Error("Failed to fetch user by UID");
 
-    return users.find((u) => u.uid.toUpperCase() === cleanUid);
+      const result = await response.json();
+      return result.data;
+    } catch (error) {
+      console.error("Error fetching user by UID:", error);
+      return undefined;
+    }
   }
 
   getCurrentUser(): User {
     try {
       const data = localStorage.getItem(this.currentUserKey);
+
       if (data) return JSON.parse(data);
     } catch {
       // fallback
     }
     return SEED_USERS[0];
   }
-
-  // setCurrentUser(user: User): void {
-  //   localStorage.setItem(this.currentUserKey, JSON.stringify(user));
-  //   // also ensure user exists in users table
-  //   const users = this.getUsers();
-  //   const idx = users.findIndex((u) => u.id === user.id);
-  //   if (idx >= 0) {
-  //     users[idx] = user;
-  //   } else {
-  //     users.push(user);
-  //   }
-  //   localStorage.setItem(this.usersKey, JSON.stringify(users));
-  // }
 
   async setCurrentUser(user: User): Promise<void> {
     localStorage.setItem(this.currentUserKey, JSON.stringify(user));
@@ -476,98 +473,42 @@ class MessengerStore {
     localStorage.setItem(this.usersKey, JSON.stringify(users));
   }
 
-  updateUserProfile(userId: string, updates: Partial<User>): User {
-    const users = this.getUsers();
-    const idx = users.findIndex((u) => u.id === userId);
-    if (idx !== -1) {
-      users[idx] = { ...users[idx], ...updates };
-      localStorage.setItem(this.usersKey, JSON.stringify(users));
-      if (this.getCurrentUser().id === userId) {
-        localStorage.setItem(this.currentUserKey, JSON.stringify(users[idx]));
-      }
-      return users[idx];
+  async updateUserProfile(
+    userId: string,
+    updates: Partial<User>,
+  ): Promise<User> {
+    console.log(userId, updates);
+    const response = await fetch(
+      "http://localhost:5000/api/v1/users/profile/update",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId,
+          updates,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Failed to update profile");
     }
-    throw new Error("User not found");
+
+    const result = await response.json();
+    const updatedUser: User = result.user;
+
+    console.log(updatedUser, "from the messenger updateProfile");
+
+    // Sync current user state if updating logged-in user
+    if (this.getCurrentUser()?.id === userId) {
+      localStorage.setItem(this.currentUserKey, JSON.stringify(updatedUser));
+    }
+
+    return updatedUser;
   }
-
-  // async sampleCallingInsteadOfGetConverversation(
-  //   userId: string,
-  // ): Promise<Conversation[]> {
-  //   const response = await fetch(
-  //     `http://localhost:5000/api/v1/chat/conversations?id=${encodeURIComponent(userId)}`,
-  //     {
-  //       method: "GET",
-  //       headers: {
-  //         "Content-Type": "application/json",
-  //       },
-  //     },
-  //   );
-
-  //   if (!response.ok) {
-  //     throw new Error("Failed to fetch conversations");
-  //   }
-
-  //   const conversations: Conversation[] = await response.json();
-
-  //   console.log(conversations, "the conversation");
-
-  //   return conversations;
-  // }
-
-  // Conversations
-  // getConversations(userId: string): Promise<Conversation[]> {
-  //   try {
-  //     const data = localStorage.getItem(this.conversationsKey);
-  //     const convs: Conversation[] = data
-  //       ? JSON.parse(data)
-  //       : SEED_CONVERSATIONS;
-  //     const allUsers = this.getUsers();
-
-  //     // Filter conversations where userId is a member and hasn't left or hidden it
-  //     const userConvs = convs.filter((c) =>
-  //       c.members.some((m) => m.userId === userId && !m.leftAt && !m.hiddenAt),
-  //     );
-
-  //     // Populate user references & last messages
-  //     const allMessages = this.getMessagesAll();
-
-  //     return userConvs.map((c) => {
-  //       const enrichedMembers = c.members.map((m) => ({
-  //         ...m,
-  //         user: allUsers.find((u) => u.id === m.userId),
-  //       }));
-
-  //       const convMessages = allMessages.filter(
-  //         (m) => m.conversationId === c.id,
-  //       );
-  //       const lastMessage = convMessages.length
-  //         ? convMessages[convMessages.length - 1]
-  //         : undefined;
-
-  //       // For direct chats, name and avatar come from the target user
-  //       let name = c.name;
-  //       let avatarUrl = c.avatarUrl;
-
-  //       if (c.type === "DIRECT") {
-  //         const otherMember = enrichedMembers.find((m) => m.userId !== userId);
-  //         if (otherMember?.user) {
-  //           name = otherMember.user.displayName;
-  //           avatarUrl = otherMember.user.avatarUrl;
-  //         }
-  //       }
-
-  //       return {
-  //         ...c,
-  //         name,
-  //         avatarUrl,
-  //         members: enrichedMembers,
-  //         lastMessage,
-  //       };
-  //     });
-  //   } catch {
-  //     return [];
-  //   }
-  // }
 
   async getConversations(userId: string): Promise<Conversation[]> {
     const response = await fetch(
@@ -586,44 +527,8 @@ class MessengerStore {
 
     const conversations: Conversation[] = await response.json();
 
-    // this.conversations = conversations;
-
-    // console.log(conversations, "the conversation");
-
     return conversations;
   }
-
-  // async getConversations(userId: string): Promise<Conversation[]> {
-  //   const token = localStorage.getItem("auth_token");
-
-  //   const response = await fetch(
-  //     "http://localhost:5000/api/v1/chat/conversations",
-  //     {
-  //       method: "GET",
-  //       headers: {
-  //         "Content-Type": "application/json",
-  //       },
-  //       body: JSON.stringify({ id: userId }),
-  //     },
-  //   );
-
-  //   if (!response.ok) {
-  //     throw new Error("Failed to fetch conversations");
-  //   }
-
-  //   const conversations: Conversation[] = await response.json();
-
-  //   console.log(conversations, "the conversation");
-
-  //   this.conversations = conversations;
-  //   return conversations;
-  // }
-
-  // getConversationById(id: string): Conversation | undefined {
-  //   const current = this.getCurrentUser();
-  //   const convs = this.getConversations(current.id);
-  //   return convs.find((c) => c.id === id);
-  // }
 
   async getConversationById(id: string): Promise<Conversation | undefined> {
     const current = this.getCurrentUser();
@@ -631,70 +536,10 @@ class MessengerStore {
     return convs.find((c) => c.id === id);
   }
 
-  // async createDirectConversation(
-  //   currentUserId: string,
-  //   targetUid: string,
-  // ): Promise<Conversation> {
-  //   const targetUser = await this.getUserByUid(targetUid);
-  //   if (!targetUser) {
-  //     throw new Error("User not found with provided UID.");
-  //   }
-  //   if (targetUser.id === currentUserId) {
-  //     throw new Error("You cannot start a direct chat with yourself.");
-  //   }
-
-  //   const allConvs: Conversation[] = JSON.parse(
-  //     localStorage.getItem(this.conversationsKey) || "[]",
-  //   );
-
-  //   // Check if direct conversation already exists between these 2
-  //   const existing = allConvs.find(
-  //     (c) =>
-  //       c.type === "DIRECT" &&
-  //       c.members.some((m) => m.userId === currentUserId) &&
-  //       c.members.some((m) => m.userId === targetUser.id),
-  //   );
-
-  //   if (existing) {
-  //     // Unhide if hidden
-  //     existing.members = existing.members.map((m) =>
-  //       m.userId === currentUserId ? { ...m, hiddenAt: undefined } : m,
-  //     );
-  //     localStorage.setItem(this.conversationsKey, JSON.stringify(allConvs));
-  //     return existing;
-  //   }
-
-  //   const newConv: Conversation = {
-  //     id: `conv_${Date.now()}`,
-  //     type: "DIRECT",
-  //     createdBy: currentUserId,
-  //     createdAt: new Date().toISOString(),
-  //     updatedAt: new Date().toISOString(),
-  //     members: [
-  //       {
-  //         conversationId: `conv_${Date.now()}`,
-  //         userId: currentUserId,
-  //         role: "MEMBER",
-  //         joinedAt: new Date().toISOString(),
-  //       },
-  //       {
-  //         conversationId: `conv_${Date.now()}`,
-  //         userId: targetUser.id,
-  //         role: "MEMBER",
-  //         joinedAt: new Date().toISOString(),
-  //       },
-  //     ],
-  //   };
-
-  //   allConvs.unshift(newConv);
-  //   localStorage.setItem(this.conversationsKey, JSON.stringify(allConvs));
-  //   return newConv;
-  // }
-
   async createDirectConversation(
     currentUserId: string,
     targetUid: string,
-  ): Promise {
+  ): Promise<Conversation> {
     let conversations: Conversation[] = [];
 
     const token = localStorage.getItem("auth_token"); // Get auth token if using JWT
@@ -728,100 +573,27 @@ class MessengerStore {
       conversations.unshift(newConv);
     }
 
+    console.log(newConv, "messengerStore create direct conversation");
+
     return newConv;
   }
 
-  // createGroupConversation(
-  //   currentUserId: string,
-  //   name: string,
-  //   memberUids: string[],
-  // ): Conversation {
-  //   if (!name.trim()) {
-  //     throw new Error("Group name is required.");
-  //   }
-
-  //   const allUsers = this.getUsers();
-  //   const memberUserIds = new Set<string>([currentUserId]);
-
-  //   memberUids.forEach((uid) => {
-  //     const u = this.getUserByUid(uid);
-  //     if (u) {
-  //       memberUserIds.add(u.id);
-  //     }
-  //   });
-
-  //   const conversationId = `conv_group_${Date.now()}`;
-  //   const members = Array.from(memberUserIds).map((uid) => ({
-  //     conversationId,
-  //     userId: uid,
-  //     role: (uid === currentUserId ? "OWNER" : "MEMBER") as MemberRole,
-  //     joinedAt: new Date().toISOString(),
-  //   }));
-
-  //   const newGroup: Conversation = {
-  //     id: conversationId,
-  //     type: "GROUP",
-  //     name: name.trim(),
-  //     avatarUrl: `https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=250&q=80`,
-  //     createdBy: currentUserId,
-  //     createdAt: new Date().toISOString(),
-  //     updatedAt: new Date().toISOString(),
-  //     members,
-  //   };
-
-  //   const allConvs: Conversation[] = JSON.parse(
-  //     localStorage.getItem(this.conversationsKey) || "[]",
-  //   );
-  //   allConvs.unshift(newGroup);
-  //   localStorage.setItem(this.conversationsKey, JSON.stringify(allConvs));
-  //   return newGroup;
-  // }
-
-  async createGroupConversation(
-    currentUserId: string,
-    name: string,
-    memberUids: string[],
-  ): Promise<Conversation> {
+  async createGroupConversation(formData: any): Promise<Conversation> {
     const response = await fetch("http://localhost:5000/api/v1/chat/group", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        currentUserId,
-        name,
-        memberUids,
-      }),
+      body: formData,
     });
 
+    const data = await response.json();
+
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || "Failed to create group conversation");
+      throw new Error(data.error || "Failed to create group conversation");
     }
 
-    const data = await response.json();
     return data.conversation;
   }
 
   // Messages
-  // private getMessagesAll(): Message[] {
-  //   try {
-  //     const data = localStorage.getItem(this.messagesKey);
-  //     return data ? JSON.parse(data) : SEED_MESSAGES;
-  //   } catch {
-  //     return SEED_MESSAGES;
-  //   }
-  // }
-
-  // private getMessagesAll(): Message[] {
-  //   try {
-  //     const data = localStorage.getItem(this.messagesKey);
-  //     return data ? JSON.parse(data) : SEED_MESSAGES;
-  //   } catch {
-  //     return SEED_MESSAGES;
-  //   }
-  // }
-
   async getMessagesAll(): Promise<Message[]> {
     try {
       const response = await fetch(
@@ -857,88 +629,6 @@ class MessengerStore {
         sender: allUsers.find((u) => u.id === m.senderId),
       }));
   }
-
-  //   async getMessages(conversationId: string): Promise<Message[]> {
-  //   try {
-  //     const response = await fetch("http://localhost:5000/api/v1/chat/messages", {
-  //       method: "POST",
-  //       headers: {
-  //         "Content-Type": "application/json",
-  //       },
-  //       body: JSON.stringify({ conversationId }),
-  //     });
-
-  //     if (!response.ok) {
-  //       throw new Error("Failed to fetch messages");
-  //     }
-
-  //     const messages: Message[] = await response.json();
-  //     return messages;
-  //   } catch (error) {
-  //     console.error("Error fetching messages:", error);
-  //     return [];
-  //   }
-  // }
-
-  // sendMessage(
-  //   conversationId: string,
-  //   senderId: string,
-  //   type: MessageType,
-  //   data: {
-  //     content?: string;
-  //     attachmentData?: {
-  //       filename: string;
-  //       mimeType: string;
-  //       size: number;
-  //       url: string;
-  //     };
-  //   },
-  // ): Message {
-  //   const allMessages = this.getMessagesAll();
-  //   const messageId = `msg_${Date.now()}`;
-
-  //   let attachment = undefined;
-  //   if (data.attachmentData) {
-  //     const attachmentId = `att_${Date.now()}`;
-  //     attachment = {
-  //       id: attachmentId,
-  //       storageKey: `uploads/${data.attachmentData.filename}`,
-  //       filename: data.attachmentData.filename,
-  //       mimeType: data.attachmentData.mimeType,
-  //       size: data.attachmentData.size,
-  //       url: data.attachmentData.url,
-  //     };
-  //   }
-
-  //   const newMessage: Message = {
-  //     id: messageId,
-  //     conversationId,
-  //     senderId,
-  //     type,
-  //     content: data.content || null,
-  //     createdAt: new Date().toISOString(),
-  //     attachment: attachment || null,
-  //   };
-
-  //   allMessages.push(newMessage);
-  //   localStorage.setItem(this.messagesKey, JSON.stringify(allMessages));
-
-  //   // Update conversation timestamp
-  //   const convs: Conversation[] = JSON.parse(
-  //     localStorage.getItem(this.conversationsKey) || "[]",
-  //   );
-  //   const convIdx = convs.findIndex((c) => c.id === conversationId);
-  //   if (convIdx !== -1) {
-  //     convs[convIdx].updatedAt = new Date().toISOString();
-  //     localStorage.setItem(this.conversationsKey, JSON.stringify(convs));
-  //   }
-
-  //   const allUsers = this.getUsers();
-  //   return {
-  //     ...newMessage,
-  //     sender: allUsers.find((u) => u.id === senderId),
-  //   };
-  // }
 
   async sendMessage(
     conversationId: string,
@@ -976,150 +666,140 @@ class MessengerStore {
     return result.data; // Fully populated Message object with attachment and sender
   }
 
-  deleteMessage(messageId: string, userId: string): boolean {
-    const allMessages = this.getMessagesAll();
-    const msgIdx = allMessages.findIndex((m) => m.id === messageId);
-    if (msgIdx === -1) return false;
-
-    const message = allMessages[msgIdx];
-    const convs = JSON.parse(
-      localStorage.getItem(this.conversationsKey) || "[]",
-    );
-    const conv = convs.find(
-      (c: Conversation) => c.id === message.conversationId,
+  async deleteMessage(messageId: string, userId: string): Promise<boolean> {
+    const response = await fetch(
+      `http://localhost:5000/api/v1/chat/messages/${messageId}`,
+      {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      },
     );
 
-    if (!conv) return false;
-
-    // Check permission: sender or group ADMIN/OWNER
-    const member = conv.members.find((m: any) => m.userId === userId);
-    const isSender = message.senderId === userId;
-    const isAdminOrOwner =
-      member && (member.role === "ADMIN" || member.role === "OWNER");
-
-    if (!isSender && !isAdminOrOwner) {
-      throw new Error("Permission denied to delete this message.");
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Failed to delete message.");
     }
 
-    // Soft deletion
-    allMessages[msgIdx].deletedAt = new Date().toISOString();
-    localStorage.setItem(this.messagesKey, JSON.stringify(allMessages));
-    return true;
+    const data = await response.json();
+    return data.success;
   }
 
-  // Member Management & Roles
-  removeUserFromGroup(
+  async removeUserFromGroup(
     conversationId: string,
     actorUserId: string,
     targetUserId: string,
-  ): void {
-    const convs: Conversation[] = JSON.parse(
-      localStorage.getItem(this.conversationsKey) || "[]",
+  ): Promise<void> {
+    const response = await fetch(
+      `http://localhost:5000/api/v1/users/groups/${conversationId}/members/${targetUserId}`,
+      {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actorUserId }),
+      },
     );
-    const convIdx = convs.findIndex((c) => c.id === conversationId);
-    if (convIdx === -1) throw new Error("Conversation not found");
 
-    const conv = convs[convIdx];
-    const actorMember = conv.members.find((m) => m.userId === actorUserId);
-    const targetMember = conv.members.find((m) => m.userId === targetUserId);
-
-    if (!actorMember) throw new Error("You are not a member of this group");
-    if (!targetMember) throw new Error("Target user is not in this group");
-
-    // Only OWNER or ADMIN can remove users
-    if (actorMember.role !== "OWNER" && actorMember.role !== "ADMIN") {
-      throw new Error("Only admins or owners can remove members.");
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Failed to remove user from group.");
     }
-
-    // Admins cannot remove owners or other admins
-    if (actorMember.role === "ADMIN") {
-      if (targetMember.role === "OWNER" || targetMember.role === "ADMIN") {
-        throw new Error("Admins cannot remove owners or other admins.");
-      }
-    }
-
-    targetMember.leftAt = new Date().toISOString();
-    localStorage.setItem(this.conversationsKey, JSON.stringify(convs));
   }
 
-  updateGroupMemberRole(
+  async updateGroupMemberRole(
     conversationId: string,
     actorUserId: string,
     targetUserId: string,
     newRole: MemberRole,
-  ): void {
-    const convs: Conversation[] = JSON.parse(
-      localStorage.getItem(this.conversationsKey) || "[]",
+  ): Promise<void> {
+    const response = await fetch(
+      `http://localhost:5000/api/v1/users/groups/${conversationId}/members/role`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actorUserId, targetUserId, newRole }),
+      },
     );
-    const convIdx = convs.findIndex((c) => c.id === conversationId);
-    if (convIdx === -1) throw new Error("Conversation not found");
 
-    const conv = convs[convIdx];
-    const actorMember = conv.members.find((m) => m.userId === actorUserId);
-    const targetMember = conv.members.find((m) => m.userId === targetUserId);
-
-    if (!actorMember || actorMember.role !== "OWNER") {
-      throw new Error("Only the group owner can manage member roles.");
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Failed to update member role.");
     }
-
-    if (!targetMember) throw new Error("Target user is not in this group");
-
-    targetMember.role = newRole;
-    localStorage.setItem(this.conversationsKey, JSON.stringify(convs));
   }
 
-  addUserToGroup(
+  async addUserToGroup(
     conversationId: string,
-    actorUserId: string,
+    currentUserId: string,
     targetUid: string,
-  ): void {
-    const targetUser = this.getUserByUid(targetUid);
-    if (!targetUser) throw new Error("User with this UID does not exist.");
-
-    const convs: Conversation[] = JSON.parse(
-      localStorage.getItem(this.conversationsKey) || "[]",
+  ): Promise<void> {
+    const response = await fetch(
+      "http://localhost:5000/api/v1/chat/group/add-user",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          conversationId,
+          currentUserId,
+          targetUid,
+        }),
+      },
     );
-    const convIdx = convs.findIndex((c) => c.id === conversationId);
-    if (convIdx === -1) throw new Error("Conversation not found");
 
-    const conv = convs[convIdx];
-    const actorMember = conv.members.find((m) => m.userId === actorUserId);
-
-    if (
-      !actorMember ||
-      (actorMember.role !== "OWNER" && actorMember.role !== "ADMIN")
-    ) {
-      throw new Error("Only admins or owners can add new members.");
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Failed to add user to group.");
     }
-
-    const existingMember = conv.members.find((m) => m.userId === targetUser.id);
-    if (existingMember) {
-      existingMember.leftAt = undefined;
-    } else {
-      conv.members.push({
-        conversationId,
-        userId: targetUser.id,
-        role: "MEMBER",
-        joinedAt: new Date().toISOString(),
-      });
-    }
-
-    localStorage.setItem(this.conversationsKey, JSON.stringify(convs));
   }
 
-  deleteConversationForUser(conversationId: string, userId: string): void {
-    const convs: Conversation[] = JSON.parse(
-      localStorage.getItem(this.conversationsKey) || "[]",
+  async deleteGroupConversation(
+    conversationId: string,
+    currentUserId: string,
+  ): Promise<void> {
+    const response = await fetch(
+      `http://localhost:5000/api/v1/users/group/${conversationId}`,
+      {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentUserId }),
+      },
     );
-    const convIdx = convs.findIndex((c) => c.id === conversationId);
-    if (convIdx === -1) return;
 
-    const member = convs[convIdx].members.find((m) => m.userId === userId);
-    if (member) {
-      member.hiddenAt = new Date().toISOString();
-      member.leftAt = new Date().toISOString();
-      localStorage.setItem(this.conversationsKey, JSON.stringify(convs));
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(
+        errorData.error || "Failed to delete group conversation.",
+      );
     }
+  }
+
+  async changePassword(
+    userId: string,
+    oldPassword: string,
+    newPassword: string,
+  ): Promise<boolean> {
+    const response = await fetch(
+      "http://localhost:5000/api/v1/users/password/change",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId,
+          oldPassword,
+          newPassword,
+        }),
+      },
+    );
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || "Failed to change password");
+    }
+
+    return result.success; // Returns true
   }
 }
 

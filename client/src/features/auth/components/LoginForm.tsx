@@ -43,7 +43,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
       // Map backend database user payload to frontend store
       const foundUser: User = {
         id: data.user.id,
-        uid: data.user.public_uid,
+        uid: data.user.uid,
         username: data.user.username,
         email: data.user.email,
         displayName: data.user.display_name,
@@ -51,7 +51,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
         createdAt: data.user.created_at,
       };
 
-      messengerStore.setCurrentUser(foundUser);
+      await messengerStore.setCurrentUser(foundUser);
       onLoginSuccess(foundUser);
       navigate("/app");
     } catch (error: any) {
