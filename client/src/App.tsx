@@ -1,7 +1,7 @@
 import { MessengerLayout } from "./features/chat/MessengerLayout";
 import { messengerStore } from "./messangerStore/messengerStore";
 import { LoginForm } from "./features/auth/components/LoginForm";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthLayout } from "./features/auth/AuthLayout";
 import { SignUpForm } from "./features/auth/components/SignUpForm";
@@ -16,8 +16,6 @@ export default function App() {
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
   };
-
-  console.log(currentUser, "from the app component");
 
   const handleLogout = () => {
     setCurrentUser(null);

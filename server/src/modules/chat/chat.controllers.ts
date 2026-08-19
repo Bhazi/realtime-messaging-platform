@@ -165,8 +165,14 @@ export class ChatController {
 
   static async sendMessage(req: Request, res: Response): Promise<void> {
     try {
-      const { conversationId, senderId: bodySenderId, type, data } = req.body;
+      const {
+        conversationId,
+        senderId: bodySenderId,
+        type,
+        content,
+      } = req.body;
       const senderId = (req as any).user?.id || bodySenderId;
+      const file = req.file; // Populated by multer middleware
 
       if (!senderId) {
         res.status(401).json({ error: "Unauthorized: senderId is required." });
@@ -182,7 +188,8 @@ export class ChatController {
         conversationId,
         senderId,
         type,
-        data || {},
+        content,
+        file,
       );
 
       res.status(201).json({
@@ -239,9 +246,6 @@ export class ChatController {
     }
   }
 
-  /**
-   * DELETE /api/v1/chat/messages/:messageId
-   */
   static async deleteMessage(req: Request, res: Response): Promise<void> {
     try {
       const { messageId } = req.params;

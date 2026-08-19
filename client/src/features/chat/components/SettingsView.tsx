@@ -165,7 +165,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   return (
-    <div className="flex-1 h-full bg-black text-zinc-100 p-6 sm:p-10 overflow-y-auto selection:bg-indigo-500 selection:text-white">
+    <motion.div
+      className="flex-1 h-full bg-black text-zinc-100 p-6 sm:p-10 overflow-y-auto selection:bg-indigo-500 selection:text-white"
+      initial={{ opacity: 0, y: 15 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+    >
       <div className="max-w-2xl mx-auto space-y-8">
         {/* Back Button & Header */}
         <div className="flex items-center gap-4">
@@ -614,6 +619,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </section>
       </div>
-    </div>
+    </motion.div>
   );
 };

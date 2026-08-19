@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Paperclip,
   Image as ImageIcon,
@@ -12,6 +12,8 @@ import { Conversation, MessageType, Message, User } from "../../../types/types";
 import { MessageList } from "./MessageList";
 import { FileUploadModal } from "./FileUploadModal";
 import { GroupMembersModal } from "./GroupMembersModal";
+
+import { motion } from "motion/react";
 
 import { messengerStore } from "../../../messangerStore/messengerStore";
 
@@ -27,62 +29,138 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onRefresh,
 }) => {
   const [textMessage, setTextMessage] = useState("");
+
   const [uploadModalType, setUploadModalType] = useState<MessageType | null>(
     null,
   );
+
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
 
-  // const messages = messengerStore.getMessages(conversation.id);
-
   const [messages, setMessages] = useState<Message[]>([]);
+  const messageInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
+    let isMounted = true;
+
     const fetchMessages = async () => {
-      console.log("the chat area rendered from the chat area component");
-      const result = await messengerStore.getMessages(conversation.id);
-      setMessages(result);
+      try {
+        setMessages([]);
+
+        const result = await messengerStore.getMessages(conversation.id);
+
+        if (isMounted) {
+          setMessages(result);
+        }
+      } catch (error) {
+        console.error("Failed to load messages:", error);
+
+        if (isMounted) {
+          setMessages([]);
+        }
+      }
     };
 
     fetchMessages();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [conversation.id]);
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      messageInputRef.current?.focus();
+    });
   }, [conversation.id]);
 
   const currentMember = conversation.members.find(
     (m) => m.userId === currentUser.id,
   );
+
   const canManageGroup =
     conversation.type === "GROUP" &&
     (currentMember?.role === "OWNER" || currentMember?.role === "ADMIN");
 
   const handleSendText = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!textMessage.trim()) return;
+    if (e) {
+      e.preventDefault();
+    }
 
-    await messengerStore.sendMessage(conversation.id, currentUser.id, "TEXT", {
-      content: textMessage.trim(),
-    });
-    setTextMessage("");
-    onRefresh();
+    const messageContent = textMessage.trim();
+
+    if (!messageContent) {
+      // Even if the input is empty, keep focus.
+      messageInputRef.current?.focus();
+      return;
+    }
+
+    try {
+      await messengerStore.sendMessage(
+        conversation.id,
+        currentUser.id,
+        "TEXT",
+        {
+          content: messageContent,
+        },
+      );
+
+      setTextMessage("");
+
+      onRefresh();
+
+      requestAnimationFrame(() => {
+        messageInputRef.current?.focus();
+      });
+    } catch (error) {
+      console.error("Failed to send message:", error);
+
+      requestAnimationFrame(() => {
+        messageInputRef.current?.focus();
+      });
+    }
   };
 
   const handleSendFile = async (
     type: MessageType,
-    fileData: { filename: string; mimeType: string; size: number; url: string },
+    file: File,
     caption?: string,
   ) => {
-    await messengerStore.sendMessage(conversation.id, currentUser.id, type, {
-      content: caption,
-      attachmentData: fileData,
-    });
-    onRefresh();
+    try {
+      await messengerStore.sendMessage(conversation.id, currentUser.id, type, {
+        content: caption,
+        file: file,
+      });
+
+      onRefresh();
+
+      requestAnimationFrame(() => {
+        messageInputRef.current?.focus();
+      });
+    } catch (error) {
+      console.error("Failed to send file:", error);
+
+      requestAnimationFrame(() => {
+        messageInputRef.current?.focus();
+      });
+    }
   };
 
   const handleDeleteMessage = async (messageId: string) => {
     try {
       await messengerStore.deleteMessage(messageId, currentUser.id);
+
       onRefresh();
+
+      requestAnimationFrame(() => {
+        messageInputRef.current?.focus();
+      });
     } catch (err: any) {
       alert(err.message || "Cannot delete message.");
+
+      requestAnimationFrame(() => {
+        messageInputRef.current?.focus();
+      });
     }
   };
 
@@ -90,33 +168,62 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     if (
       confirm("Are you sure you want to remove this chat from your account?")
     ) {
-      await messengerStore.deleteGroupConversation(
-        conversation.id,
-        currentUser.id,
-      );
-      onRefresh();
+      try {
+        await messengerStore.deleteGroupConversation(
+          conversation.id,
+          currentUser.id,
+        );
+
+        onRefresh();
+      } catch (error) {
+        console.error("Failed to delete conversation:", error);
+      }
     }
   };
 
   return (
-    <div className="flex-1 h-full flex flex-col bg-black text-zinc-100 relative">
-      {/* CHAT HEADER */}
-      <div className="px-6 py-4 bg-zinc-950/90 border-b border-zinc-800/80 flex items-center justify-between z-10 backdrop-blur-md">
+    <motion.div
+      className="flex-1 h-full flex flex-col bg-black text-zinc-100 relative"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{
+        duration: 0.25,
+        ease: "easeOut",
+      }}
+    >
+      <motion.div
+        className="px-6 py-4 bg-zinc-950/90 border-b border-zinc-800/80 flex items-center justify-between z-10 backdrop-blur-md"
+        initial={{
+          opacity: 0,
+          y: -15,
+        }}
+        animate={{
+          opacity: 1,
+          y: 0,
+        }}
+        transition={{
+          duration: 0.3,
+          ease: "easeOut",
+        }}
+      >
         <div className="flex items-center gap-3">
           <img
             src={`http://localhost:5000${conversation.avatarUrl}`}
             alt={conversation.name}
             className="w-10 h-10 rounded-full object-cover border border-zinc-700"
           />
+
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-sm sm:text-base font-bold text-white">
                 {conversation.name}
               </h2>
+
               <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">
                 {conversation.type}
               </span>
             </div>
+
             <p className="text-xs text-zinc-400">
               {conversation.type === "GROUP"
                 ? `${conversation.members.length} members`
@@ -125,6 +232,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </div>
         </div>
 
+        {/* Header buttons */}
         <div className="flex items-center gap-2">
           {conversation.type === "GROUP" && (
             <button
@@ -132,6 +240,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-medium text-zinc-300 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               <Users size={14} />
+
               <span>Members ({conversation.members.length})</span>
             </button>
           )}
@@ -144,9 +253,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             <Trash2 size={15} />
           </button>
         </div>
-      </div>
+      </motion.div>
 
-      {/* MESSAGES LIST AREA */}
       <MessageList
         messages={messages}
         currentUserId={currentUser.id}
@@ -154,13 +262,25 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         canManageMessages={canManageGroup}
       />
 
-      {/* COMPOSER BAR (TEXT + MEDIA ATTACHMENTS) */}
-      <div className="p-3 sm:p-4 bg-zinc-950/90 border-t border-zinc-800/80 z-10 backdrop-blur-md">
+      <motion.div
+        className="p-3 sm:p-4 bg-zinc-950/90 border-t border-zinc-800/80 z-10 backdrop-blur-md"
+        initial={{
+          opacity: 0,
+          y: 20,
+        }}
+        animate={{
+          opacity: 1,
+          y: 0,
+        }}
+        transition={{
+          duration: 0.3,
+          ease: "easeOut",
+        }}
+      >
         <form
           onSubmit={handleSendText}
-          className="w-full max-w-4xl mx-auto flex items-center gap-2 relative"
+          className="w-full max-w-4xl mx-auto flex items-center gap-6 relative"
         >
-          {/* Attachment Toggle / Menu */}
           <div className="relative">
             <button
               type="button"
@@ -174,13 +294,31 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             >
               <Plus
                 size={18}
-                className={`transition-transform ${showAttachmentMenu ? "rotate-45" : ""}`}
+                className={`transition-transform ${
+                  showAttachmentMenu ? "rotate-45" : ""
+                }`}
               />
             </button>
 
-            {/* Attachment Options Popover */}
             {showAttachmentMenu && (
-              <div className="absolute bottom-12 left-0 z-50 bg-zinc-900 border border-zinc-800 rounded-2xl p-2 shadow-2xl flex flex-col gap-1 w-44">
+              <motion.div
+                className="absolute bottom-12 left-0 z-50 bg-zinc-900 border border-zinc-800 rounded-2xl p-2 shadow-2xl flex flex-col gap-1 w-44"
+                initial={{
+                  opacity: 0,
+                  y: 8,
+                  scale: 0.95,
+                }}
+                animate={{
+                  opacity: 1,
+                  y: 0,
+                  scale: 1,
+                }}
+                transition={{
+                  duration: 0.15,
+                  ease: "easeOut",
+                }}
+              >
+                {/* PHOTO */}
                 <button
                   type="button"
                   onClick={() => {
@@ -190,8 +328,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   className="w-full px-3 py-2 text-left text-xs font-medium text-zinc-200 hover:bg-zinc-800 rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
                 >
                   <ImageIcon size={15} className="text-indigo-400" />
+
                   <span>Send Photo</span>
                 </button>
+
+                {/* VIDEO */}
                 <button
                   type="button"
                   onClick={() => {
@@ -201,8 +342,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   className="w-full px-3 py-2 text-left text-xs font-medium text-zinc-200 hover:bg-zinc-800 rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
                 >
                   <VideoIcon size={15} className="text-purple-400" />
+
                   <span>Send Video</span>
                 </button>
+
+                {/* FILE */}
                 <button
                   type="button"
                   onClick={() => {
@@ -212,42 +356,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   className="w-full px-3 py-2 text-left text-xs font-medium text-zinc-200 hover:bg-zinc-800 rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
                 >
                   <Paperclip size={15} className="text-cyan-400" />
+
                   <span>Attach File</span>
                 </button>
-              </div>
+              </motion.div>
             )}
           </div>
 
-          {/* Quick Media Action Buttons */}
-          <div className="hidden sm:flex items-center gap-1 bg-zinc-900/80 p-1 border border-zinc-800/80 rounded-xl">
-            <button
-              type="button"
-              onClick={() => setUploadModalType("PHOTO")}
-              title="Send Photo"
-              className="p-1.5 text-zinc-400 hover:text-indigo-400 hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
-            >
-              <ImageIcon size={16} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setUploadModalType("VIDEO")}
-              title="Send Video"
-              className="p-1.5 text-zinc-400 hover:text-purple-400 hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
-            >
-              <VideoIcon size={16} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setUploadModalType("FILE")}
-              title="Send File"
-              className="p-1.5 text-zinc-400 hover:text-cyan-400 hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
-            >
-              <Paperclip size={16} />
-            </button>
-          </div>
-
-          {/* Text Input */}
           <input
+            ref={messageInputRef}
             type="text"
             value={textMessage}
             onChange={(e) => setTextMessage(e.target.value)}
@@ -255,18 +372,30 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors"
           />
 
-          {/* Send Button */}
-          <button
+          <motion.button
             type="submit"
             disabled={!textMessage.trim()}
+            whileHover={
+              textMessage.trim()
+                ? {
+                    scale: 1.05,
+                  }
+                : undefined
+            }
+            whileTap={
+              textMessage.trim()
+                ? {
+                    scale: 0.95,
+                  }
+                : undefined
+            }
             className="p-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded-xl shadow-md transition-all flex items-center justify-center cursor-pointer disabled:cursor-not-allowed"
           >
             <Send size={16} />
-          </button>
+          </motion.button>
         </form>
-      </div>
+      </motion.div>
 
-      {/* UPLOAD MODAL */}
       <FileUploadModal
         isOpen={!!uploadModalType}
         onClose={() => setUploadModalType(null)}
@@ -274,7 +403,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         onSendFile={handleSendFile}
       />
 
-      {/* GROUP MEMBERS MODAL */}
       {conversation.type === "GROUP" && (
         <GroupMembersModal
           isOpen={isMembersModalOpen}
@@ -284,6 +412,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           onGroupUpdated={onRefresh}
         />
       )}
-    </div>
+    </motion.div>
   );
 };

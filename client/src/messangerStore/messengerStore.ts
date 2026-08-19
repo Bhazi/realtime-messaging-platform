@@ -636,25 +636,26 @@ class MessengerStore {
     type: MessageType,
     data: {
       content?: string;
-      attachmentData?: {
-        filename: string;
-        mimeType: string;
-        size: number;
-        url: string;
-      };
+      file?: File;
     },
   ): Promise<Message> {
+    const formData = new FormData();
+    formData.append("conversationId", conversationId);
+    formData.append("senderId", senderId);
+    formData.append("type", type);
+
+    if (data.content) {
+      formData.append("content", data.content);
+    }
+
+    if (data.file) {
+      formData.append("file", data.file);
+    }
+
     const response = await fetch("http://localhost:5000/api/v1/chat/send", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        conversationId,
-        senderId,
-        type,
-        data,
-      }),
+      // Note: Do NOT set Content-Type header when sending FormData; browser sets boundary automatically
+      body: formData,
     });
 
     if (!response.ok) {
@@ -663,7 +664,7 @@ class MessengerStore {
     }
 
     const result = await response.json();
-    return result.data; // Fully populated Message object with attachment and sender
+    return result.data;
   }
 
   async deleteMessage(messageId: string, userId: string): Promise<boolean> {

@@ -93,36 +93,60 @@ export class ChatService {
     return await ChatModel.getMessagesByConversationId(conversationId);
   }
 
+  // static async sendMessage(
+  //   conversationId: string,
+  //   senderId: string,
+  //   type: string,
+  //   data: {
+  //     content?: string;
+  //     attachmentData?: {
+  //       filename: string;
+  //       mimeType: string;
+  //       size: number;
+  //       url: string;
+  //     };
+  //   },
+  // ) {}
+
   static async sendMessage(
     conversationId: string,
     senderId: string,
     type: string,
-    data: {
-      content?: string;
-      attachmentData?: {
-        filename: string;
-        mimeType: string;
-        size: number;
-        url: string;
-      };
-    },
+    content?: string,
+    file?: Express.Multer.File,
   ) {
     if (!conversationId || !senderId) {
       throw new Error("conversationId and senderId are required.");
     }
 
-    if (!data.content && !data.attachmentData) {
+    if (!content && !file) {
       throw new Error(
         "Message must contain either text content or an attachment.",
       );
+    }
+
+    let attachmentData: AttachmentPayload | undefined = undefined;
+
+    if (file) {
+      const storageKey = file.path.replace(/\\/g, "/"); // Normalize path separators for Linux/Windows
+      const hostUrl = process.env.SERVER_URL || "http://localhost:5000";
+      const fileUrl = `${hostUrl}/${storageKey}`;
+
+      attachmentData = {
+        filename: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+        storageKey,
+        url: fileUrl,
+      };
     }
 
     return await ChatModel.sendMessage(
       conversationId,
       senderId,
       type || "TEXT",
-      data.content,
-      data.attachmentData,
+      content,
+      attachmentData,
     );
   }
 

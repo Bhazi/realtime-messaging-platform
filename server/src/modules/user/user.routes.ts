@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { UserController } from "./user.controllers.js";
 import { uploadAvatar, uploadGroupImage } from "../../middlewares/uploads.js";
+import { uploadChatAttachment } from "../../middlewares/uploads.js";
 
 const router = Router();
 
