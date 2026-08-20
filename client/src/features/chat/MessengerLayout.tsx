@@ -37,23 +37,10 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
     Conversation | undefined
   >(undefined);
 
-  console.log("i am from the messenger layout component");
-
   const loadConversations = async () => {
     try {
       const result = await messengerStore.getConversations(currentUser.id);
       setConversations(result);
-
-      console.log(result);
-      // if (conversationId) {
-      //   const active = await messengerStore.getConversationById(conversationId);
-
-      //   setActiveConversation(active);
-      // } else {
-      //   setActiveConversation(result[0] ?? null);
-      // }
-
-      // i changed the up logic here
 
       if (conversationId) {
         const active = result.find((c) => c.id === conversationId);
@@ -71,7 +58,6 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
   };
 
   useEffect(() => {
-    console.log("in the messenger layout component, inside useEffect");
     loadConversations();
   }, [currentUser.id, conversationId, refreshKey]);
 

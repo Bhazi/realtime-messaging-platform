@@ -13,19 +13,13 @@ export default function App() {
     return messengerStore.getCurrentUser();
   });
 
-  console.log("App : in the app component at the top");
-
   const handleLoginSuccess = (user: User) => {
-    console.log(
-      "i am from the handlelogin success function inside the app component",
-    );
-    console.log(currentUser); // old value
     setCurrentUser(user);
-    console.log(currentUser); // old value
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
+    localStorage.removeItem("auth_token");
     localStorage.removeItem("luma_user");
   };
 

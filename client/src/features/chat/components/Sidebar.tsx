@@ -67,10 +67,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* User Card info */}
         <div className="p-2.5 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 flex items-center gap-2.5">
           <img
-            // src={currentUser.avatarUrl}
             src={`http://localhost:5000${currentUser.avatarUrl}`}
             alt="Avatar"
-            // alt={currentUser.displayName}
             className="w-9 h-9 rounded-full object-cover border border-zinc-700"
           />
           <div className="flex-1 truncate">

@@ -1,5 +1,7 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
+
 import { motion } from "motion/react";
+
 import { FileText, Download, Trash2, Eye, Play } from "lucide-react";
 
 import { Message, MessageAttachment, MessageType } from "../../../types/types";
@@ -8,12 +10,23 @@ import { MediaViewerModal } from "./MediaViewerModal";
 
 interface MessageListProps {
   messages: Message[];
+
   currentUserId: string;
+
   onDeleteMessage: (messageId: string) => void;
+
   canManageMessages: boolean;
-  // IMPORTANT:
-  // Used to detect when the user switches conversations.
+
   conversationId: string;
+
+  /*
+   * Parent owns pagination.
+   */
+  onLoadOlderMessages: () => Promise<void>;
+
+  hasMoreMessages: boolean;
+
+  isLoadingOlderMessages: boolean;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
@@ -22,32 +35,118 @@ export const MessageList: React.FC<MessageListProps> = ({
   onDeleteMessage,
   canManageMessages,
   conversationId,
+
+  /*
+   * IMPORTANT:
+   *
+   * Your previous code was missing these three
+   * values in the destructuring.
+   */
+  onLoadOlderMessages,
+  hasMoreMessages,
+  isLoadingOlderMessages,
 }) => {
   const [activeViewer, setActiveViewer] = useState<{
     attachment: MessageAttachment;
     type: MessageType;
   } | null>(null);
 
+  /*
+   * Main scroll container.
+   */
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+
+  /*
+   * Bottom anchor.
+   */
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
+  /*
+   * Detect first render / conversation switch.
+   */
   const isInitialLoad = useRef(true);
 
+  /*
+   * Used for detecting newly appended messages.
+   */
   const previousMessageCount = useRef(0);
 
+  /*
+   * Prevent multiple top-scroll requests.
+   */
+  const loadingOlderRef = useRef(false);
+
+  /*
+   * Stores scroll position before older messages
+   * are inserted.
+   *
+   * Example:
+   *
+   * previousScrollHeight = 1200
+   * previousScrollTop    = 100
+   *
+   * After adding old messages:
+   *
+   * newScrollHeight = 1800
+   *
+   * We set:
+   *
+   * scrollTop = 100 + (1800 - 1200)
+   *           = 700
+   */
+  const previousScrollHeight = useRef<number | null>(null);
+
+  const previousScrollTop = useRef<number | null>(null);
+
+  /*
+   * Tells us that the next messages update is
+   * specifically caused by loading older messages.
+   */
+  const loadingOlderMessagesRef = useRef(false);
+
+  /*
+   * Reset state when conversation changes.
+   */
   useEffect(() => {
     isInitialLoad.current = true;
+
     previousMessageCount.current = 0;
+
+    previousScrollHeight.current = null;
+
+    previousScrollTop.current = null;
+
+    loadingOlderMessagesRef.current = false;
+
+    loadingOlderRef.current = false;
   }, [conversationId]);
 
+  /*
+   * ============================================================
+   * INITIAL LOAD / NEW MESSAGE SCROLLING
+   * ============================================================
+   *
+   * DO NOT automatically scroll to bottom whenever messages
+   * increase.
+   *
+   * That would break pagination.
+   */
   useEffect(() => {
     if (messages.length === 0) {
       return;
     }
 
+    /*
+     * First page loaded.
+     *
+     * Start the chat at the bottom.
+     */
     if (isInitialLoad.current) {
-      messagesEndRef.current?.scrollIntoView({
-        behavior: "auto",
-        block: "end",
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({
+          behavior: "auto",
+          block: "end",
+        });
       });
 
       previousMessageCount.current = messages.length;
@@ -57,15 +156,178 @@ export const MessageList: React.FC<MessageListProps> = ({
       return;
     }
 
+    /*
+     * If we are loading older messages, DON'T
+     * scroll to bottom.
+     *
+     * The useLayoutEffect below will restore the
+     * previous viewport.
+     */
+    if (loadingOlderMessagesRef.current) {
+      return;
+    }
+
+    /*
+     * A new message was appended.
+     *
+     * Scroll to bottom.
+     */
     if (messages.length > previousMessageCount.current) {
-      messagesEndRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "end",
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "end",
+        });
       });
     }
 
     previousMessageCount.current = messages.length;
   }, [messages]);
+
+  /*
+   * ============================================================
+   * RESTORE SCROLL POSITION AFTER PREPENDING OLD MESSAGES
+   * ============================================================
+   *
+   * useLayoutEffect is important here because it runs after
+   * React has updated the DOM but before the browser paints.
+   */
+  useLayoutEffect(() => {
+    if (!loadingOlderMessagesRef.current) {
+      return;
+    }
+
+    const container = scrollContainerRef.current;
+
+    if (!container) {
+      return;
+    }
+
+    const oldScrollHeight = previousScrollHeight.current;
+
+    const oldScrollTop = previousScrollTop.current;
+
+    if (oldScrollHeight !== null && oldScrollTop !== null) {
+      const newScrollHeight = container.scrollHeight;
+
+      const heightDifference = newScrollHeight - oldScrollHeight;
+
+      container.scrollTop = oldScrollTop + heightDifference;
+    }
+
+    /*
+     * Reset.
+     */
+    previousScrollHeight.current = null;
+
+    previousScrollTop.current = null;
+
+    loadingOlderMessagesRef.current = false;
+
+    loadingOlderRef.current = false;
+
+    /*
+     * Update count after old messages were added.
+     */
+    previousMessageCount.current = messages.length;
+  }, [messages]);
+
+  /*
+   * ============================================================
+   * LOAD OLDER MESSAGES
+   * ============================================================
+   */
+  const handleLoadOlderMessages = async () => {
+    const container = scrollContainerRef.current;
+
+    if (!container) {
+      return;
+    }
+
+    /*
+     * Don't make duplicate requests.
+     */
+    if (loadingOlderRef.current || isLoadingOlderMessages || !hasMoreMessages) {
+      return;
+    }
+
+    /*
+     * Save the exact scroll position BEFORE
+     * loading older messages.
+     */
+    previousScrollHeight.current = container.scrollHeight;
+
+    previousScrollTop.current = container.scrollTop;
+
+    /*
+     * Tell the effects that this update is
+     * pagination, not a new message.
+     */
+    loadingOlderMessagesRef.current = true;
+
+    loadingOlderRef.current = true;
+
+    try {
+      await onLoadOlderMessages();
+    } catch (error) {
+      console.error("Failed to load older messages:", error);
+
+      /*
+       * Reset if the request failed.
+       */
+      loadingOlderMessagesRef.current = false;
+
+      loadingOlderRef.current = false;
+
+      previousScrollHeight.current = null;
+
+      previousScrollTop.current = null;
+    }
+  };
+
+  /*
+   * ============================================================
+   * SCROLL HANDLER
+   * ============================================================
+   */
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+
+    if (!container) {
+      return;
+    }
+
+    const handleScroll = () => {
+      /*
+       * User reached near the top.
+       *
+       * 50px gives us a small threshold so the request
+       * starts slightly before the absolute top.
+       */
+      const isNearTop = container.scrollTop <= 50;
+
+      if (
+        isNearTop &&
+        hasMoreMessages &&
+        !isLoadingOlderMessages &&
+        !loadingOlderRef.current
+      ) {
+        handleLoadOlderMessages();
+      }
+    };
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+    };
+  }, [hasMoreMessages, isLoadingOlderMessages, onLoadOlderMessages]);
+
+  /*
+   * ============================================================
+   * HELPERS
+   * ============================================================
+   */
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024 * 1024) {
@@ -116,16 +378,39 @@ export const MessageList: React.FC<MessageListProps> = ({
 
   return (
     <motion.div
+      ref={scrollContainerRef}
       className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4"
       variants={messageContainerVariants}
       initial="hidden"
       animate="visible"
     >
+      {/* ===================================================== */}
+      {/* LOADING OLDER MESSAGES */}
+      {/* ===================================================== */}
+
+      {isLoadingOlderMessages && messages.length > 0 && (
+        <div className="flex justify-center py-2">
+          <div className="flex items-center gap-2 text-xs text-zinc-500">
+            <div className="w-3.5 h-3.5 border-2 border-zinc-700 border-t-indigo-500 rounded-full animate-spin" />
+
+            <span>Loading older messages...</span>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================== */}
+      {/* NO MESSAGES */}
+      {/* ===================================================== */}
+
       {messages.length === 0 ? (
         <motion.div
           className="h-full flex flex-col items-center justify-center text-center p-8 text-zinc-500 space-y-3"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
+          initial={{
+            opacity: 0,
+          }}
+          animate={{
+            opacity: 1,
+          }}
           transition={{
             duration: 0.25,
             ease: "easeOut",
@@ -146,6 +431,10 @@ export const MessageList: React.FC<MessageListProps> = ({
           </div>
         </motion.div>
       ) : (
+        /* =================================================== */
+        /* MESSAGES */
+        /* =================================================== */
+
         messages.map((msg) => {
           const isSelf = msg.senderId === currentUserId;
 
@@ -161,6 +450,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                 isSelf ? "flex-row-reverse" : "flex-row"
               }`}
             >
+              {/* Avatar */}
               <img
                 src={`http://localhost:5000${msg.sender?.avatarUrl}`}
                 alt={msg.sender?.displayName || "Sender"}
@@ -172,6 +462,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                   isSelf ? "items-end" : "items-start"
                 }`}
               >
+                {/* Message header */}
                 <div
                   className={`flex items-center gap-2 text-[11px] text-zinc-400 ${
                     isSelf ? "justify-end" : "justify-start"
@@ -186,6 +477,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                   <span>{formatTime(msg.createdAt)}</span>
                 </div>
 
+                {/* Deleted message */}
                 {isDeleted ? (
                   <div className="p-3 bg-zinc-900/60 border border-zinc-800/80 rounded-2xl italic text-xs text-zinc-500 flex items-center gap-2">
                     <Trash2 size={13} />
@@ -193,6 +485,10 @@ export const MessageList: React.FC<MessageListProps> = ({
                   </div>
                 ) : (
                   <div className="relative group/card">
+                    {/* ================================================= */}
+                    {/* TEXT */}
+                    {/* ================================================= */}
+
                     {msg.type === "TEXT" && (
                       <div
                         className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed max-w-sm sm:max-w-md break-words shadow-md ${
@@ -204,6 +500,10 @@ export const MessageList: React.FC<MessageListProps> = ({
                         {msg.content}
                       </div>
                     )}
+
+                    {/* ================================================= */}
+                    {/* PHOTO */}
+                    {/* ================================================= */}
 
                     {msg.type === "PHOTO" && msg.attachment && (
                       <div className="space-y-1.5 max-w-sm">
@@ -245,6 +545,10 @@ export const MessageList: React.FC<MessageListProps> = ({
                         </div>
                       </div>
                     )}
+
+                    {/* ================================================= */}
+                    {/* VIDEO */}
+                    {/* ================================================= */}
 
                     {msg.type === "VIDEO" && msg.attachment && (
                       <div className="space-y-1.5 max-w-sm">
@@ -325,6 +629,10 @@ export const MessageList: React.FC<MessageListProps> = ({
                       </div>
                     )}
 
+                    {/* ================================================= */}
+                    {/* DELETE */}
+                    {/* ================================================= */}
+
                     {canDelete && (
                       <button
                         onClick={() => onDeleteMessage(msg.id)}
@@ -344,7 +652,15 @@ export const MessageList: React.FC<MessageListProps> = ({
         })
       )}
 
+      {/* ===================================================== */}
+      {/* BOTTOM ANCHOR */}
+      {/* ===================================================== */}
+
       <div ref={messagesEndRef} />
+
+      {/* ===================================================== */}
+      {/* MEDIA VIEWER */}
+      {/* ===================================================== */}
 
       <MediaViewerModal
         isOpen={!!activeViewer}

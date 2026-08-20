@@ -32,34 +32,24 @@ export const CreateGroupDialog: React.FC<CreateGroupDialogProps> = ({
     const cleanUid = memberUidInput.trim().toUpperCase();
     if (!cleanUid) return;
 
-    console.log("reached here 1");
-
     const user = await messengerStore.getUserByUid(cleanUid);
     if (!user) {
       setErrorMsg(`No user found with UID "${cleanUid}".`);
       return;
     }
 
-    console.log(user, "from the handledAddedUID function 2");
-
     if (user.id === currentUserId) {
       setErrorMsg("You are automatically included as group Owner.");
       return;
     }
-
-    console.log(user, "from the handledAddedUID function 3");
 
     if (addedUids.includes(cleanUid)) {
       setErrorMsg("User UID already added to list.");
       return;
     }
 
-    console.log(user, "from the handledAddedUID function 4");
-
     setAddedUids([...addedUids, cleanUid]);
     setMemberUidInput("");
-
-    console.log(user, "from the handledAddedUID function 5");
   };
 
   const handleRemoveUid = (uid: string) => {
@@ -79,7 +69,6 @@ export const CreateGroupDialog: React.FC<CreateGroupDialogProps> = ({
     }
 
     setSelectedImage(file);
-    // setPreviewUrl(URL.createObjectURL(file));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

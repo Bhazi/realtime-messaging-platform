@@ -106,8 +106,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
       const data = await response.json();
 
-      messengerStore.setCurrentUser(data.user);
-
       onCurrentUserChange(data.user);
 
       if (fileInputRef.current) {

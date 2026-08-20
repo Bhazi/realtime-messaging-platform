@@ -61,7 +61,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
         createdAt: data.user.created_at,
       };
 
-      await messengerStore.setCurrentUser(foundUser);
+      messengerStore.setCurrentUser(foundUser);
       onLoginSuccess(foundUser);
       navigate("/app");
     } catch (error: any) {

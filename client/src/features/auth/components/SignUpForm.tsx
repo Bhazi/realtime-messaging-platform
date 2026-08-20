@@ -20,16 +20,6 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSignUpSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
-  console.log("Signup: at the top");
-
-  useEffect(() => {
-    console.log("sign up mounted");
-
-    return () => {
-      console.log("signup unmounted");
-    };
-  }, []);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
