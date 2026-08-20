@@ -28,85 +28,26 @@ export const MessageList: React.FC<MessageListProps> = ({
     type: MessageType;
   } | null>(null);
 
-  /*
-   * Bottom anchor.
-   *
-   * We scroll this element into view instead of
-   * manipulating the scrollTop directly.
-   */
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  /*
-   * Tells us whether the messages currently being
-   * displayed are the initial messages for this chat.
-   */
   const isInitialLoad = useRef(true);
 
-  /*
-   * Stores the previous number of messages.
-   *
-   * Example:
-   *
-   * Previous = 20
-   * Current  = 21
-   *
-   * => a new message was added.
-   */
   const previousMessageCount = useRef(0);
 
-  /*
-   * --------------------------------------------------
-   * RESET WHEN CONVERSATION CHANGES
-   * --------------------------------------------------
-   *
-   * When the user changes:
-   *
-   * Chat A → Chat B
-   *
-   * we need to treat Chat B as a completely new
-   * conversation.
-   */
   useEffect(() => {
     isInitialLoad.current = true;
     previousMessageCount.current = 0;
   }, [conversationId]);
 
-  /*
-   * --------------------------------------------------
-   * CHAT SCROLLING
-   * --------------------------------------------------
-   */
   useEffect(() => {
-    /*
-     * Don't do anything when there are no messages.
-     */
     if (messages.length === 0) {
       return;
     }
 
-    /*
-     * ------------------------------------------------
-     * INITIAL CONVERSATION LOAD
-     * ------------------------------------------------
-     *
-     * The API has returned the messages.
-     *
-     * We DON'T want:
-     *
-     * top
-     *   ↓
-     *   ↓
-     *   ↓
-     * bottom
-     *
-     * We simply position the scrollbar at the bottom.
-     */
     if (isInitialLoad.current) {
-      requestAnimationFrame(() => {
-        messagesEndRef.current?.scrollIntoView({
-          behavior: "auto",
-          block: "end",
-        });
+      messagesEndRef.current?.scrollIntoView({
+        behavior: "auto",
+        block: "end",
       });
 
       previousMessageCount.current = messages.length;
@@ -116,36 +57,16 @@ export const MessageList: React.FC<MessageListProps> = ({
       return;
     }
 
-    /*
-     * ------------------------------------------------
-     * NEW MESSAGE
-     * ------------------------------------------------
-     *
-     * If the number of messages increased, somebody
-     * sent a new message.
-     *
-     * In this case we DO want smooth scrolling.
-     */
     if (messages.length > previousMessageCount.current) {
-      requestAnimationFrame(() => {
-        messagesEndRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "end",
-        });
+      messagesEndRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
       });
     }
 
-    /*
-     * Remember the current count for the next render.
-     */
     previousMessageCount.current = messages.length;
   }, [messages]);
 
-  /*
-   * --------------------------------------------------
-   * FILE SIZE FORMATTER
-   * --------------------------------------------------
-   */
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024 * 1024) {
       return `${(bytes / 1024).toFixed(0)} KB`;
@@ -154,11 +75,6 @@ export const MessageList: React.FC<MessageListProps> = ({
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   };
 
-  /*
-   * --------------------------------------------------
-   * TIME FORMATTER
-   * --------------------------------------------------
-   */
   const formatTime = (isoString: string) => {
     const d = new Date(isoString);
 
@@ -168,27 +84,6 @@ export const MessageList: React.FC<MessageListProps> = ({
     });
   };
 
-  /*
-   * --------------------------------------------------
-   * MESSAGE CONTAINER ANIMATION
-   * --------------------------------------------------
-   *
-   * IMPORTANT:
-   *
-   * There is NO staggerChildren here.
-   *
-   * Staggering all messages means:
-   *
-   * Message 1 appears
-   * Message 2 appears
-   * Message 3 appears
-   * Message 4 appears
-   *
-   * while the container height is continuously changing.
-   *
-   * That can make the scrollbar visually move from
-   * top → bottom.
-   */
   const messageContainerVariants = {
     hidden: {
       opacity: 0,
@@ -204,21 +99,6 @@ export const MessageList: React.FC<MessageListProps> = ({
     },
   };
 
-  /*
-   * --------------------------------------------------
-   * INDIVIDUAL MESSAGE ANIMATION
-   * --------------------------------------------------
-   *
-   * Only fade.
-   *
-   * We intentionally DON'T use:
-   *
-   * y: 6
-   *
-   * because messages moving vertically while the chat
-   * is positioning itself can make the initial load
-   * look like it is moving around.
-   */
   const messageVariants = {
     hidden: {
       opacity: 0,
@@ -241,10 +121,6 @@ export const MessageList: React.FC<MessageListProps> = ({
       initial="hidden"
       animate="visible"
     >
-      {/* ================================================== */}
-      {/* EMPTY CHAT */}
-      {/* ================================================== */}
-
       {messages.length === 0 ? (
         <motion.div
           className="h-full flex flex-col items-center justify-center text-center p-8 text-zinc-500 space-y-3"
@@ -270,11 +146,6 @@ export const MessageList: React.FC<MessageListProps> = ({
           </div>
         </motion.div>
       ) : (
-        /*
-         * ==================================================
-         * MESSAGES
-         * ==================================================
-         */
         messages.map((msg) => {
           const isSelf = msg.senderId === currentUserId;
 
@@ -290,29 +161,17 @@ export const MessageList: React.FC<MessageListProps> = ({
                 isSelf ? "flex-row-reverse" : "flex-row"
               }`}
             >
-              {/* ======================================== */}
-              {/* SENDER AVATAR */}
-              {/* ======================================== */}
-
               <img
                 src={`http://localhost:5000${msg.sender?.avatarUrl}`}
                 alt={msg.sender?.displayName || "Sender"}
                 className="w-8 h-8 rounded-full object-cover border border-zinc-700 flex-shrink-0 mt-1"
               />
 
-              {/* ======================================== */}
-              {/* MESSAGE CONTAINER */}
-              {/* ======================================== */}
-
               <div
                 className={`max-w-xs sm:max-w-md lg:max-w-lg space-y-1 ${
                   isSelf ? "items-end" : "items-start"
                 }`}
               >
-                {/* ====================================== */}
-                {/* SENDER NAME + TIME */}
-                {/* ====================================== */}
-
                 <div
                   className={`flex items-center gap-2 text-[11px] text-zinc-400 ${
                     isSelf ? "justify-end" : "justify-start"
@@ -327,10 +186,6 @@ export const MessageList: React.FC<MessageListProps> = ({
                   <span>{formatTime(msg.createdAt)}</span>
                 </div>
 
-                {/* ====================================== */}
-                {/* MESSAGE CONTENT */}
-                {/* ====================================== */}
-
                 {isDeleted ? (
                   <div className="p-3 bg-zinc-900/60 border border-zinc-800/80 rounded-2xl italic text-xs text-zinc-500 flex items-center gap-2">
                     <Trash2 size={13} />
@@ -338,10 +193,6 @@ export const MessageList: React.FC<MessageListProps> = ({
                   </div>
                 ) : (
                   <div className="relative group/card">
-                    {/* ================================= */}
-                    {/* TEXT MESSAGE */}
-                    {/* ================================= */}
-
                     {msg.type === "TEXT" && (
                       <div
                         className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed max-w-sm sm:max-w-md break-words shadow-md ${
@@ -353,10 +204,6 @@ export const MessageList: React.FC<MessageListProps> = ({
                         {msg.content}
                       </div>
                     )}
-
-                    {/* ================================= */}
-                    {/* PHOTO MESSAGE */}
-                    {/* ================================= */}
 
                     {msg.type === "PHOTO" && msg.attachment && (
                       <div className="space-y-1.5 max-w-sm">
@@ -399,10 +246,6 @@ export const MessageList: React.FC<MessageListProps> = ({
                       </div>
                     )}
 
-                    {/* ================================= */}
-                    {/* VIDEO MESSAGE */}
-                    {/* ================================= */}
-
                     {msg.type === "VIDEO" && msg.attachment && (
                       <div className="space-y-1.5 max-w-sm">
                         {msg.content && (
@@ -444,10 +287,6 @@ export const MessageList: React.FC<MessageListProps> = ({
                       </div>
                     )}
 
-                    {/* ================================= */}
-                    {/* FILE MESSAGE */}
-                    {/* ================================= */}
-
                     {msg.type === "FILE" && msg.attachment && (
                       <div className="space-y-1.5 max-w-sm">
                         {msg.content && (
@@ -486,10 +325,6 @@ export const MessageList: React.FC<MessageListProps> = ({
                       </div>
                     )}
 
-                    {/* ================================= */}
-                    {/* DELETE MESSAGE BUTTON */}
-                    {/* ================================= */}
-
                     {canDelete && (
                       <button
                         onClick={() => onDeleteMessage(msg.id)}
@@ -509,15 +344,7 @@ export const MessageList: React.FC<MessageListProps> = ({
         })
       )}
 
-      {/* ================================================== */}
-      {/* BOTTOM SCROLL ANCHOR */}
-      {/* ================================================== */}
-
       <div ref={messagesEndRef} />
-
-      {/* ================================================== */}
-      {/* MEDIA VIEWER */}
-      {/* ================================================== */}
 
       <MediaViewerModal
         isOpen={!!activeViewer}

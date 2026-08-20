@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, ArrowRight } from "lucide-react";
 import { messengerStore } from "../../../messangerStore/messengerStore";
@@ -19,6 +19,16 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSignUpSuccess }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+
+  console.log("Signup: at the top");
+
+  useEffect(() => {
+    console.log("sign up mounted");
+
+    return () => {
+      console.log("signup unmounted");
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,6 +72,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSignUpSuccess }) => {
       messengerStore.setCurrentUser(newUser);
       onSignUpSuccess(newUser);
       navigate("/app");
+      console.log("signupForm: after the navigate('app')");
     } catch (error: any) {
       setErrorMessage(error.message);
     } finally {

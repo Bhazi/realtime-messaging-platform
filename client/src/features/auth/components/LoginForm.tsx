@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, ArrowRight } from "lucide-react";
 import { ForgotPasswordModal } from "../../../components/ForgotPasswordModal";
@@ -18,6 +18,16 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
+
+  console.log("Login: at the top");
+
+  useEffect(() => {
+    console.log("login up mounted");
+
+    return () => {
+      console.log("login unmounted");
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

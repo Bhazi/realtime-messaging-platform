@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { act, useEffect, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Sidebar } from "../chat/components/Sidebar";
 import { ChatArea } from "../chat/components/ChatArea";
@@ -37,23 +37,33 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
     Conversation | undefined
   >(undefined);
 
-  console.log(conversations);
+  console.log("i am from the messenger layout component");
 
   const loadConversations = async () => {
     try {
       const result = await messengerStore.getConversations(currentUser.id);
-
       setConversations(result);
 
+      console.log(result);
+      // if (conversationId) {
+      //   const active = await messengerStore.getConversationById(conversationId);
+
+      //   setActiveConversation(active);
+      // } else {
+      //   setActiveConversation(result[0] ?? null);
+      // }
+
+      // i changed the up logic here
+
       if (conversationId) {
-        const active = await messengerStore.getConversationById(conversationId);
+        const active = result.find((c) => c.id === conversationId);
 
         setActiveConversation(active);
       } else {
         setActiveConversation(result[0] ?? null);
       }
 
-      return result;
+      // return result;
     } catch (error) {
       console.error("Failed to load conversations:", error);
       return [];
@@ -61,7 +71,7 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
   };
 
   useEffect(() => {
-    console.log("in the messenger layout component,");
+    console.log("in the messenger layout component, inside useEffect");
     loadConversations();
   }, [currentUser.id, conversationId, refreshKey]);
 
@@ -137,7 +147,6 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
         ) : activeConversation ? (
           <ChatArea
             key={`${activeConversation.id}_${refreshKey}`}
-            // key={activeConversation.id}
             conversation={activeConversation}
             currentUser={currentUser}
             onRefresh={handleRefresh}

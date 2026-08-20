@@ -41,37 +41,23 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const messageInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    let isMounted = true;
-
     const fetchMessages = async () => {
       try {
         setMessages([]);
 
         const result = await messengerStore.getMessages(conversation.id);
 
-        if (isMounted) {
-          setMessages(result);
-        }
+        setMessages(result);
       } catch (error) {
         console.error("Failed to load messages:", error);
 
-        if (isMounted) {
-          setMessages([]);
-        }
+        setMessages([]);
       }
     };
 
     fetchMessages();
 
-    return () => {
-      isMounted = false;
-    };
-  }, [conversation.id]);
-
-  useEffect(() => {
-    requestAnimationFrame(() => {
-      messageInputRef.current?.focus();
-    });
+    messageInputRef.current?.focus();
   }, [conversation.id]);
 
   const currentMember = conversation.members.find(
@@ -89,12 +75,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
     const messageContent = textMessage.trim();
 
-    if (!messageContent) {
-      // Even if the input is empty, keep focus.
-      messageInputRef.current?.focus();
-      return;
-    }
-
     try {
       await messengerStore.sendMessage(
         conversation.id,
@@ -109,15 +89,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
       onRefresh();
 
-      requestAnimationFrame(() => {
-        messageInputRef.current?.focus();
-      });
+      messageInputRef.current?.focus();
     } catch (error) {
       console.error("Failed to send message:", error);
-
-      requestAnimationFrame(() => {
-        messageInputRef.current?.focus();
-      });
     }
   };
 
@@ -134,15 +108,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
       onRefresh();
 
-      requestAnimationFrame(() => {
-        messageInputRef.current?.focus();
-      });
+      messageInputRef.current?.focus();
     } catch (error) {
       console.error("Failed to send file:", error);
-
-      requestAnimationFrame(() => {
-        messageInputRef.current?.focus();
-      });
     }
   };
 
@@ -152,15 +120,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
       onRefresh();
 
-      requestAnimationFrame(() => {
-        messageInputRef.current?.focus();
-      });
+      messageInputRef.current?.focus();
     } catch (err: any) {
       alert(err.message || "Cannot delete message.");
-
-      requestAnimationFrame(() => {
-        messageInputRef.current?.focus();
-      });
     }
   };
 

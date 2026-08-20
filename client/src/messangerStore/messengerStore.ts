@@ -622,6 +622,8 @@ class MessengerStore {
     const allMessages = await this.getMessagesAll();
     const allUsers = await this.getUsers();
 
+    console.log("hello");
+
     return allMessages
       .filter((m) => m.conversationId === conversationId)
       .map((m) => ({
