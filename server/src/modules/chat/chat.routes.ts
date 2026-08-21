@@ -8,6 +8,11 @@ import {
 
 const router = Router();
 
+router.get(
+  "/conversations/:conversationId/messages",
+  ChatController.getMessages,
+);
+
 // Endpoint: POST /api/chat/direct
 router.post("/direct", ChatController.createDirectConversation);
 

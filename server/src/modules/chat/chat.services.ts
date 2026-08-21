@@ -86,28 +86,6 @@ export class ChatService {
     );
   }
 
-  static async getMessages(conversationId: string) {
-    if (!conversationId) {
-      throw new Error("Conversation ID is required.");
-    }
-    return await ChatModel.getMessagesByConversationId(conversationId);
-  }
-
-  // static async sendMessage(
-  //   conversationId: string,
-  //   senderId: string,
-  //   type: string,
-  //   data: {
-  //     content?: string;
-  //     attachmentData?: {
-  //       filename: string;
-  //       mimeType: string;
-  //       size: number;
-  //       url: string;
-  //     };
-  //   },
-  // ) {}
-
   static async sendMessage(
     conversationId: string,
     senderId: string,
@@ -152,6 +130,17 @@ export class ChatService {
 
   static async getAllMessages() {
     return await ChatModel.getAllMessages();
+  }
+
+  static async getMessages(
+    conversationId: string,
+    limit: number,
+    cursor?: {
+      createdAt: string;
+      id: string;
+    },
+  ) {
+    return await ChatModel.getMessages(conversationId, limit, cursor);
   }
 
   static async addUserToGroup(

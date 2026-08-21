@@ -141,28 +141,6 @@ export class ChatController {
     }
   }
 
-  static async getMessages(req: Request, res: Response): Promise<void> {
-    try {
-      // Allow passing conversationId via body or query param
-      const { conversationId } = req.body;
-      const targetConvId =
-        conversationId || (req.query.conversationId as string);
-
-      if (!targetConvId) {
-        res.status(400).json({ error: "conversationId is required." });
-        return;
-      }
-
-      const messages = await ChatService.getMessages(targetConvId);
-
-      res.status(200).json(messages);
-    } catch (err: any) {
-      res.status(500).json({
-        error: err.message || "Failed to fetch messages.",
-      });
-    }
-  }
-
   static async sendMessage(req: Request, res: Response): Promise<void> {
     try {
       const {
@@ -202,6 +180,73 @@ export class ChatController {
       });
     }
   }
+
+  static async getMessages(req: Request, res: Response): Promise<void> {
+    try {
+      const { conversationId } = req.params;
+
+      const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
+
+      const cursorParam = req.query.cursor as string | undefined;
+
+      let cursor;
+
+      if (cursorParam) {
+        try {
+          cursor = JSON.parse(
+            Buffer.from(cursorParam, "base64").toString("utf8"),
+          );
+        } catch {
+          res.status(400).json({
+            error: "Invalid cursor.",
+          });
+          return;
+        }
+      }
+
+      const result = await ChatService.getMessages(
+        conversationId,
+        limit,
+        cursor,
+      );
+
+      const nextCursor = result.nextCursor
+        ? Buffer.from(JSON.stringify(result.nextCursor)).toString("base64")
+        : null;
+
+      res.status(200).json({
+        messages: result.messages,
+        nextCursor,
+        hasMore: result.hasMore,
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        error: err.message || "Failed to fetch messages.",
+      });
+    }
+  }
+
+  // static async getMessages(req: Request, res: Response): Promise<void> {
+  //   try {
+  //     // Allow passing conversationId via body or query param
+  //     const { conversationId } = req.body;
+  //     const targetConvId =
+  //       conversationId || (req.query.conversationId as string);
+
+  //     if (!targetConvId) {
+  //       res.status(400).json({ error: "conversationId is required." });
+  //       return;
+  //     }
+
+  //     const messages = await ChatService.getMessages(targetConvId);
+
+  //     res.status(200).json(messages);
+  //   } catch (err: any) {
+  //     res.status(500).json({
+  //       error: err.message || "Failed to fetch messages.",
+  //     });
+  //   }
+  // }
 
   static async getAllMessages(_req: Request, res: Response): Promise<void> {
     try {

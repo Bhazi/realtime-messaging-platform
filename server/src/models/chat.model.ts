@@ -393,6 +393,101 @@ export class ChatModel {
     }
   }
 
+  // newly added
+  static async getMessages(
+    conversationId: string,
+    limit: number,
+    cursor?: {
+      createdAt: string;
+      id: string;
+    },
+  ) {
+    const query = `
+    SELECT 
+      m.id,
+      m.conversation_id AS "conversationId",
+      m.sender_id AS "senderId",
+      m.type,
+      m.content,
+      m.created_at AS "createdAt",
+      m.updated_at AS "updatedAt",
+
+      CASE 
+        WHEN ma.id IS NOT NULL THEN json_build_object(
+          'id', ma.id,
+          'storageKey', ma.storage_key,
+          'filename', ma.filename,
+          'mimeType', ma.mime_type,
+          'size', ma.size,
+          'url', ma.url
+        )
+        ELSE NULL
+      END AS attachment,
+
+      json_build_object(
+        'id', u.id,
+        'uid', u.uid,
+        'username', u.username,
+        'displayName', u.display_name,
+        'avatarUrl', u.avatar_url
+      ) AS sender
+
+    FROM messages m
+
+    JOIN users u 
+      ON m.sender_id = u.id
+
+    LEFT JOIN message_attachments ma 
+      ON m.attachment_id = ma.id
+
+    WHERE 
+      m.conversation_id = $1
+      AND m.deleted_at IS NULL
+
+      ${
+        cursor
+          ? `AND (
+              m.created_at < $2
+              OR (
+                m.created_at = $2
+                AND m.id < $3
+              )
+            )`
+          : ""
+      }
+
+    ORDER BY m.created_at DESC, m.id DESC
+
+    LIMIT $${cursor ? 4 : 2};
+  `;
+
+    const values = cursor
+      ? [conversationId, cursor.createdAt, cursor.id, limit + 1]
+      : [conversationId, limit + 1];
+
+    const { rows } = await pool.query(query, values);
+
+    const hasMore = rows.length > limit;
+
+    const messages = rows.slice(0, limit);
+
+    const lastMessage = messages[messages.length - 1];
+
+    const nextCursor =
+      hasMore && lastMessage
+        ? {
+            createdAt: lastMessage.createdAt,
+            id: lastMessage.id,
+          }
+        : null;
+
+    return {
+      messages: messages.reverse(),
+      nextCursor,
+      hasMore,
+    };
+  }
+
   /**
    * Fetch all non-deleted messages for a given conversation ID,
    * populated with attachment details and sender info.
@@ -438,120 +533,6 @@ export class ChatModel {
     const { rows } = await pool.query(query, [conversationId]);
     return rows;
   }
-
-  /**
-   * Inserts a message (and optional attachment) into PostgreSQL within a transaction,
-   * updates the conversation's updated_at timestamp, and returns the full message object.
-   */
-  // static async sendMessage(
-  //   conversationId: string,
-  //   senderId: string,
-  //   type: string,
-  //   content?: string,
-  //   attachmentData?: {
-  //     filename: string;
-  //     mimeType: string;
-  //     size: number;
-  //     url: string;
-  //   },
-  // ) {
-  //   const client = await pool.connect();
-
-  //   try {
-  //     await client.query("BEGIN");
-
-  //     let attachmentId: string | null = null;
-
-  //     // 1. Insert attachment if provided
-  //     if (attachmentData) {
-  //       const storageKey = `uploads/${attachmentData.filename}`;
-  //       const insertAttachmentQuery = `
-  //         INSERT INTO message_attachments (storage_key, filename, mime_type, size, url)
-  //         VALUES ($1, $2, $3, $4, $5)
-  //         RETURNING id;
-  //       `;
-  //       const attRes = await client.query(insertAttachmentQuery, [
-  //         storageKey,
-  //         attachmentData.filename,
-  //         attachmentData.mimeType,
-  //         attachmentData.size,
-  //         attachmentData.url,
-  //       ]);
-  //       attachmentId = attRes.rows[0].id;
-  //     }
-
-  //     // 2. Insert message
-  //     const insertMessageQuery = `
-  //       INSERT INTO messages (conversation_id, sender_id, type, content, attachment_id)
-  //       VALUES ($1, $2, $3, $4, $5)
-  //       RETURNING id;
-  //     `;
-  //     const msgRes = await client.query(insertMessageQuery, [
-  //       conversationId,
-  //       senderId,
-  //       type,
-  //       content || null,
-  //       attachmentId,
-  //     ]);
-  //     const messageId = msgRes.rows[0].id;
-
-  //     // 3. Update parent conversation updated_at
-  //     await client.query(
-  //       `UPDATE conversations SET updated_at = NOW() WHERE id = $1;`,
-  //       [conversationId],
-  //     );
-
-  //     // 4. Unhide conversation for all members on new message
-  //     await client.query(
-  //       `UPDATE conversation_members SET hidden_at = NULL WHERE conversation_id = $1;`,
-  //       [conversationId],
-  //     );
-
-  //     await client.query("COMMIT");
-
-  //     // 5. Fetch fully formatted message with sender & attachment JSON
-  //     const fetchMessageQuery = `
-  //       SELECT
-  //         m.id,
-  //         m.conversation_id AS "conversationId",
-  //         m.sender_id AS "senderId",
-  //         m.type,
-  //         m.content,
-  //         m.created_at AS "createdAt",
-  //         m.updated_at AS "updatedAt",
-  //         CASE
-  //           WHEN ma.id IS NOT NULL THEN json_build_object(
-  //             'id', ma.id,
-  //             'storageKey', ma.storage_key,
-  //             'filename', ma.filename,
-  //             'mimeType', ma.mime_type,
-  //             'size', ma.size,
-  //             'url', ma.url
-  //           )
-  //           ELSE NULL
-  //         END AS attachment,
-  //         json_build_object(
-  //           'id', u.id,
-  //           'uid', u.uid,
-  //           'username', u.username,
-  //           'displayName', u.display_name,
-  //           'avatarUrl', u.avatar_url
-  //         ) AS sender
-  //       FROM messages m
-  //       JOIN users u ON m.sender_id = u.id
-  //       LEFT JOIN message_attachments ma ON m.attachment_id = ma.id
-  //       WHERE m.id = $1;
-  //     `;
-
-  //     const { rows } = await pool.query(fetchMessageQuery, [messageId]);
-  //     return rows[0];
-  //   } catch (error) {
-  //     await client.query("ROLLBACK");
-  //     throw error;
-  //   } finally {
-  //     client.release();
-  //   }
-  // }
 
   static async sendMessage(
     conversationId: string,
