@@ -6,12 +6,35 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthLayout } from "./features/auth/AuthLayout";
 import { SignUpForm } from "./features/auth/components/SignUpForm";
 import { User } from "./types/types";
+import { socket } from "./lib/socket";
 import "./index.css";
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     return messengerStore.getCurrentUser();
   });
+
+  useEffect(() => {
+    socket.connect();
+
+    const handleConnect = () => {
+      console.log("✅ Socket connected:", socket.id);
+    };
+
+    const handleConnectError = (error: Error) => {
+      console.error("❌ Socket connection error:", error.message);
+    };
+
+    socket.on("connect", handleConnect);
+    socket.on("connect_error", handleConnectError);
+
+    return () => {
+      socket.off("connect", handleConnect);
+      socket.off("connect_error", handleConnectError);
+
+      socket.disconnect();
+    };
+  }, []);
 
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);

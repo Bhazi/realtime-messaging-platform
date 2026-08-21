@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+
 import {
   Paperclip,
   Image as ImageIcon,
@@ -12,12 +13,16 @@ import {
 import { Conversation, MessageType, Message, User } from "../../../types/types";
 
 import { MessageList } from "./MessageList";
+
 import { FileUploadModal } from "./FileUploadModal";
+
 import { GroupMembersModal } from "./GroupMembersModal";
 
 import { motion } from "motion/react";
 
 import { messengerStore } from "../../../messangerStore/messengerStore";
+
+import { socket } from "../../../lib/socket";
 
 interface ChatAreaProps {
   conversation: Conversation;
@@ -30,6 +35,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   currentUser,
   onRefresh,
 }) => {
+  /*
+   * =====================================================
+   * STATE
+   * =====================================================
+   */
+
   const [textMessage, setTextMessage] = useState("");
 
   const [uploadModalType, setUploadModalType] = useState<MessageType | null>(
@@ -41,55 +52,48 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
 
   /*
-   * Messages currently displayed in the UI.
-   *
-   * Important:
-   *
-   * Initially:
-   *
-   * [older ... older ... newest]
-   *
-   * When loading older:
-   *
-   * [OLD OLD OLD] + [existing messages]
+   * Messages currently displayed.
    */
   const [messages, setMessages] = useState<Message[]>([]);
 
   const messageInputRef = useRef<HTMLInputElement | null>(null);
 
   /*
-   * Cursor used to fetch the next/older page.
+   * Cursor used to fetch older messages.
    */
   const [nextCursor, setNextCursor] = useState<string | null>(null);
 
   /*
-   * Whether the server says there are more older messages.
+   * Whether older messages exist.
    */
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
 
   /*
-   * Loading state for both initial and older-message loading.
+   * Loading state.
    */
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
   /*
-   * Initial conversation load.
+   * =====================================================
+   * LOAD MESSAGES
+   * =====================================================
    */
+
   useEffect(() => {
     let cancelled = false;
 
     const fetchMessages = async () => {
       try {
         setMessages([]);
+
         setNextCursor(null);
+
         setHasMoreMessages(true);
+
         setIsLoadingMessages(true);
 
         /*
-         * First request does NOT contain a cursor.
-         *
-         * limit = 20 is just an example.
-         * You can use 50, 30, etc.
+         * Load existing messages.
          */
         const result = await messengerStore.getMessages(conversation.id, {
           limit: 20,
@@ -112,7 +116,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         console.error("Failed to load messages:", error);
 
         setMessages([]);
+
         setNextCursor(null);
+
         setHasMoreMessages(false);
       } finally {
         if (!cancelled) {
@@ -124,7 +130,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     fetchMessages();
 
     /*
-     * Focus input after changing conversation.
+     * Focus input.
      */
     messageInputRef.current?.focus();
 
@@ -134,10 +140,97 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   }, [conversation.id]);
 
   /*
-   * Load older messages.
-   *
-   * This function is passed to MessageList.
+   * =====================================================
+   * SOCKET.IO — JOIN / LEAVE CONVERSATION
+   * =====================================================
    */
+
+  useEffect(() => {
+    if (!conversation?.id) {
+      return;
+    }
+
+    /*
+     * Tell backend we want to receive
+     * messages for this conversation.
+     */
+    socket.emit("join_conversation", conversation.id);
+
+    console.log("🔌 Joined conversation:", conversation.id);
+
+    /*
+     * Leave when conversation changes
+     * or component unmounts.
+     */
+    return () => {
+      socket.emit("leave_conversation", conversation.id);
+
+      console.log("🔌 Left conversation:", conversation.id);
+    };
+  }, [conversation.id]);
+
+  /*
+   * =====================================================
+   * SOCKET.IO — RECEIVE NEW MESSAGE
+   * =====================================================
+   */
+
+  useEffect(() => {
+    /*
+     * Handle message received from backend.
+     */
+    const handleNewMessage = (message: Message) => {
+      console.log("📨 New message received:", message);
+
+      /*
+       * Make sure this message belongs
+       * to the currently open conversation.
+       */
+      if (message.conversationId !== conversation.id) {
+        return;
+      }
+
+      /*
+       * Add message to UI.
+       */
+      setMessages((prev) => {
+        /*
+         * Prevent duplicates.
+         */
+        const alreadyExists = prev.some(
+          (existing) => existing.id === message.id,
+        );
+
+        if (alreadyExists) {
+          return prev;
+        }
+
+        /*
+         * New messages go at the end.
+         */
+        return [...prev, message];
+      });
+    };
+
+    /*
+     * Start listening.
+     */
+    socket.on("new_message", handleNewMessage);
+
+    /*
+     * Cleanup listener.
+     */
+    return () => {
+      socket.off("new_message", handleNewMessage);
+    };
+  }, [conversation.id]);
+
+  /*
+   * =====================================================
+   * LOAD OLDER MESSAGES
+   * =====================================================
+   */
+
   const loadOlderMessages = async (): Promise<void> => {
     /*
      * Prevent duplicate requests.
@@ -149,24 +242,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     try {
       setIsLoadingMessages(true);
 
-      /*
-       * Ask backend for messages BEFORE nextCursor.
-       */
       const result = await messengerStore.getMessages(conversation.id, {
         limit: 20,
         cursor: nextCursor,
       });
 
       /*
-       * VERY IMPORTANT:
-       *
-       * Older messages go BEFORE current messages.
+       * Older messages go BEFORE
+       * existing messages.
        */
       setMessages((prev) => {
-        /*
-         * Avoid duplicates just in case the API returns
-         * an already loaded message.
-         */
         const existingIds = new Set(prev.map((message) => message.id));
 
         const newMessages = result.messages.filter(
@@ -177,12 +262,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       });
 
       /*
-       * Cursor for the next older page.
+       * Update cursor.
        */
       setNextCursor(result.nextCursor);
 
       /*
-       * Server tells us whether another page exists.
+       * Update hasMore.
        */
       setHasMoreMessages(result.hasMore);
     } catch (error) {
@@ -191,6 +276,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       setIsLoadingMessages(false);
     }
   };
+
+  /*
+   * =====================================================
+   * GROUP PERMISSIONS
+   * =====================================================
+   */
 
   const currentMember = conversation.members.find(
     (m) => m.userId === currentUser.id,
@@ -201,8 +292,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     (currentMember?.role === "OWNER" || currentMember?.role === "ADMIN");
 
   /*
-   * Send text message.
+   * =====================================================
+   * SEND TEXT
+   * =====================================================
    */
+
   const handleSendText = async (e?: React.FormEvent) => {
     if (e) {
       e.preventDefault();
@@ -211,13 +305,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     const messageContent = textMessage.trim();
 
     /*
-     * Don't send empty messages.
+     * Don't send empty message.
      */
     if (!messageContent) {
       return;
     }
 
     try {
+      /*
+       * HTTP request.
+       *
+       * Backend saves message and
+       * then broadcasts through Socket.IO.
+       */
       await messengerStore.sendMessage(
         conversation.id,
         currentUser.id,
@@ -227,17 +327,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         },
       );
 
+      /*
+       * Clear input.
+       */
       setTextMessage("");
 
       /*
-       * If onRefresh updates the conversation/messages,
-       * keep it.
+       * DO NOT call onRefresh().
        *
-       * Ideally, in a real messenger, you would append the
-       * newly created message or receive it through WebSocket.
+       * Socket.IO will update messages.
        */
-      onRefresh();
-
       messageInputRef.current?.focus();
     } catch (error) {
       console.error("Failed to send message:", error);
@@ -245,21 +344,30 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   };
 
   /*
-   * Send file/photo/video.
+   * =====================================================
+   * SEND FILE / PHOTO / VIDEO
+   * =====================================================
    */
+
   const handleSendFile = async (
     type: MessageType,
     file: File,
     caption?: string,
   ) => {
     try {
+      /*
+       * Still use HTTP/FormData for
+       * the actual file upload.
+       */
       await messengerStore.sendMessage(conversation.id, currentUser.id, type, {
         content: caption,
         file,
       });
 
-      onRefresh();
-
+      /*
+       * Socket.IO will broadcast
+       * the resulting DB message.
+       */
       messageInputRef.current?.focus();
     } catch (error) {
       console.error("Failed to send file:", error);
@@ -267,12 +375,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   };
 
   /*
-   * Delete a message.
+   * =====================================================
+   * DELETE MESSAGE
+   * =====================================================
    */
+
   const handleDeleteMessage = async (messageId: string) => {
     try {
       await messengerStore.deleteMessage(messageId, currentUser.id);
 
+      /*
+       * Keep your current refresh
+       * until we implement message_deleted
+       * Socket.IO events.
+       */
       onRefresh();
 
       messageInputRef.current?.focus();
@@ -282,8 +398,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   };
 
   /*
-   * Delete conversation.
+   * =====================================================
+   * DELETE CONVERSATION
+   * =====================================================
    */
+
   const handleDeleteConversation = async () => {
     if (
       !confirm("Are you sure you want to remove this chat from your account?")
@@ -303,19 +422,29 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   };
 
+  /*
+   * =====================================================
+   * RENDER
+   * =====================================================
+   */
+
   return (
     <motion.div
       className="flex-1 h-full flex flex-col bg-black text-zinc-100 relative"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
+      initial={{
+        opacity: 0,
+      }}
+      animate={{
+        opacity: 1,
+      }}
       transition={{
         duration: 0.25,
         ease: "easeOut",
       }}
     >
-      {/* ===================================================== */}
+      {/* ================================================= */}
       {/* HEADER */}
-      {/* ===================================================== */}
+      {/* ================================================= */}
 
       <motion.div
         className="px-6 py-4 bg-zinc-950/90 border-b border-zinc-800/80 flex items-center justify-between z-10 backdrop-blur-md"
@@ -359,6 +488,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         </div>
 
         {/* Header buttons */}
+
         <div className="flex items-center gap-2">
           {conversation.type === "GROUP" && (
             <button
@@ -381,9 +511,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         </div>
       </motion.div>
 
-      {/* ===================================================== */}
+      {/* ================================================= */}
       {/* MESSAGE LIST */}
-      {/* ===================================================== */}
+      {/* ================================================= */}
 
       <MessageList
         messages={messages}
@@ -396,9 +526,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         isLoadingOlderMessages={isLoadingMessages}
       />
 
-      {/* ===================================================== */}
+      {/* ================================================= */}
       {/* MESSAGE INPUT */}
-      {/* ===================================================== */}
+      {/* ================================================= */}
 
       <motion.div
         className="p-3 sm:p-4 bg-zinc-950/90 border-t border-zinc-800/80 z-10 backdrop-blur-md"
@@ -420,6 +550,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           className="w-full max-w-4xl mx-auto flex items-center gap-6 relative"
         >
           {/* Attachment button */}
+
           <div className="relative">
             <button
               type="button"
@@ -458,10 +589,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 }}
               >
                 {/* PHOTO */}
+
                 <button
                   type="button"
                   onClick={() => {
                     setUploadModalType("PHOTO");
+
                     setShowAttachmentMenu(false);
                   }}
                   className="w-full px-3 py-2 text-left text-xs font-medium text-zinc-200 hover:bg-zinc-800 rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
@@ -472,10 +605,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 </button>
 
                 {/* VIDEO */}
+
                 <button
                   type="button"
                   onClick={() => {
                     setUploadModalType("VIDEO");
+
                     setShowAttachmentMenu(false);
                   }}
                   className="w-full px-3 py-2 text-left text-xs font-medium text-zinc-200 hover:bg-zinc-800 rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
@@ -486,10 +621,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 </button>
 
                 {/* FILE */}
+
                 <button
                   type="button"
                   onClick={() => {
                     setUploadModalType("FILE");
+
                     setShowAttachmentMenu(false);
                   }}
                   className="w-full px-3 py-2 text-left text-xs font-medium text-zinc-200 hover:bg-zinc-800 rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
@@ -503,6 +640,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </div>
 
           {/* Input */}
+
           <input
             ref={messageInputRef}
             type="text"
@@ -513,6 +651,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           />
 
           {/* Send */}
+
           <motion.button
             type="submit"
             disabled={!textMessage.trim()}
@@ -537,9 +676,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         </form>
       </motion.div>
 
-      {/* ===================================================== */}
+      {/* ================================================= */}
       {/* FILE UPLOAD MODAL */}
-      {/* ===================================================== */}
+      {/* ================================================= */}
 
       <FileUploadModal
         isOpen={!!uploadModalType}
@@ -548,9 +687,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         onSendFile={handleSendFile}
       />
 
-      {/* ===================================================== */}
+      {/* ================================================= */}
       {/* GROUP MEMBERS */}
-      {/* ===================================================== */}
+      {/* ================================================= */}
 
       {conversation.type === "GROUP" && (
         <GroupMembersModal

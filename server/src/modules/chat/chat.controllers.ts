@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { ChatService } from "./chat.services.js";
+import { emitNewMessage } from "./chat.socket.js";
 
 export class ChatController {
   static async createDirectConversation(
@@ -149,16 +150,21 @@ export class ChatController {
         type,
         content,
       } = req.body;
+
       const senderId = (req as any).user?.id || bodySenderId;
-      const file = req.file; // Populated by multer middleware
+      const file = req.file;
 
       if (!senderId) {
-        res.status(401).json({ error: "Unauthorized: senderId is required." });
+        res.status(401).json({
+          error: "Unauthorized: senderId is required.",
+        });
         return;
       }
 
       if (!conversationId) {
-        res.status(400).json({ error: "conversationId is required." });
+        res.status(400).json({
+          error: "conversationId is required.",
+        });
         return;
       }
 
@@ -170,6 +176,10 @@ export class ChatController {
         file,
       );
 
+      // 🔥 Notify everyone in this conversation
+      emitNewMessage(conversationId, message);
+
+      // Normal REST response to the sender
       res.status(201).json({
         message: "Message sent successfully",
         data: message,
@@ -225,28 +235,6 @@ export class ChatController {
       });
     }
   }
-
-  // static async getMessages(req: Request, res: Response): Promise<void> {
-  //   try {
-  //     // Allow passing conversationId via body or query param
-  //     const { conversationId } = req.body;
-  //     const targetConvId =
-  //       conversationId || (req.query.conversationId as string);
-
-  //     if (!targetConvId) {
-  //       res.status(400).json({ error: "conversationId is required." });
-  //       return;
-  //     }
-
-  //     const messages = await ChatService.getMessages(targetConvId);
-
-  //     res.status(200).json(messages);
-  //   } catch (err: any) {
-  //     res.status(500).json({
-  //       error: err.message || "Failed to fetch messages.",
-  //     });
-  //   }
-  // }
 
   static async getAllMessages(_req: Request, res: Response): Promise<void> {
     try {
