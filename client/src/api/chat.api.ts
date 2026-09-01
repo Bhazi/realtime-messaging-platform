@@ -1,22 +1,19 @@
-// messengerStore.ts
-import { Conversation } from "../types/types";
+import { Conversation, Message, MessageType } from "../types/types";
+import { apiFetch } from "./apiClient";
 
-export class MessengerStore {
-  private conversations: Conversation[] = [];
+export const chatApi = {
+  createDirectConversation: async (
+    currentUserId: string,
+    targetUid: string,
+  ): Promise<Conversation> => {
+    let conversations: Conversation[] = [];
 
-  /**
-   * Creates or retrieves a direct conversation from the Express backend
-   */
-  async createDirectConversation(targetUid: string): Promise {
-    const token = localStorage.getItem("auth_token"); // Get auth token if using JWT
-
-    const response = await fetch("http://localhost:5000/api/chat/direct", {
+    const response = await apiFetch("/chat/direct", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: token ? `Bearer ${token}` : "",
       },
-      body: JSON.stringify({ targetUid }),
+      body: JSON.stringify({ currentUserId, targetUid }),
     });
 
     const data = await response.json();
@@ -29,20 +26,162 @@ export class MessengerStore {
     const newConv: Conversation = data.conversation;
 
     // Update local state in memory so UI re-renders instantly
-    const existingIndex = this.conversations.findIndex(
-      (c) => c.id === newConv.id,
-    );
+    const existingIndex = conversations.findIndex((c) => c.id === newConv.id);
 
     if (existingIndex !== -1) {
       // Replace existing conversation (unhidden state)
-      this.conversations[existingIndex] = newConv;
+      conversations[existingIndex] = newConv;
     } else {
       // Prepend new conversation to top of list
-      this.conversations.unshift(newConv);
+      conversations.unshift(newConv);
     }
 
     return newConv;
-  }
-}
+  },
 
-export const messengerStore = new MessengerStore();
+  createGroupConversation: async (formData: any): Promise<Conversation> => {
+    const response = await apiFetch("/chat/group", {
+      method: "POST",
+      body: formData,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to create group conversation");
+    }
+
+    return data.conversation;
+  },
+
+  deleteMessage: async (
+    messageId: string,
+    userId: string,
+  ): Promise<boolean> => {
+    const response = await apiFetch(`/chat/messages/${messageId}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Failed to delete message.");
+    }
+
+    const data = await response.json();
+    return data.success;
+  },
+
+  getConversations: async (userId: string): Promise<Conversation[]> => {
+    const response = await apiFetch(
+      `/chat/conversations?id=${encodeURIComponent(userId)}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch conversations");
+    }
+
+    const conversations: Conversation[] = await response.json();
+
+    return conversations;
+  },
+
+  getMessages: async (
+    conversationId: string,
+    options?: {
+      limit?: number;
+      cursor?: string | null;
+    },
+  ) => {
+    const limit = options?.limit ?? 50;
+
+    const params = new URLSearchParams();
+
+    params.set("limit", String(limit));
+
+    if (options?.cursor) {
+      params.set("cursor", options.cursor);
+    }
+
+    const response = await apiFetch(
+      `/chat/conversations/${conversationId}/messages?${params.toString()}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch messages");
+    }
+
+    return await response.json();
+  },
+
+  getMessagesAll: async (): Promise<Message[]> => {
+    try {
+      const response = await apiFetch("/chat/messages/all", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch all messages");
+      }
+
+      const messages: Message[] = await response.json();
+      return messages;
+    } catch (error) {
+      console.error("Error fetching all messages:", error);
+      return [];
+    }
+  },
+
+  sendMessage: async (
+    conversationId: string,
+    senderId: string,
+    type: MessageType,
+    data: {
+      content?: string;
+      file?: File;
+    },
+  ): Promise<Message> => {
+    const formData = new FormData();
+    formData.append("conversationId", conversationId);
+    formData.append("senderId", senderId);
+    formData.append("type", type);
+
+    if (data.content) {
+      formData.append("content", data.content);
+    }
+
+    if (data.file) {
+      formData.append("file", data.file);
+    }
+
+    const response = await apiFetch("/chat/send", {
+      method: "POST",
+      // Note: Do NOT set Content-Type header when sending FormData; browser sets boundary automatically
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Failed to send message");
+    }
+
+    const result = await response.json();
+    return result.data;
+  },
+};

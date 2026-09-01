@@ -72,8 +72,6 @@ export class ChatController {
         userId: bodyUserId,
       } = req.body;
 
-      console.log(req.body);
-
       const currentUserId = (req as any).user?.id || bodyUserId;
 
       if (!currentUserId) {
@@ -244,38 +242,6 @@ export class ChatController {
       res.status(500).json({
         error: err.message || "Failed to fetch all messages.",
       });
-    }
-  }
-
-  static async addUserToGroup(req: Request, res: Response): Promise<void> {
-    try {
-      const { conversationId, currentUserId: bodyUserId, targetUid } = req.body;
-      const currentUserId = (req as any).user?.id || bodyUserId;
-
-      if (!currentUserId) {
-        res.status(400).json({ error: "currentUserId is required." });
-        return;
-      }
-
-      const result = await ChatService.addUserToGroup(
-        conversationId,
-        currentUserId,
-        targetUid,
-      );
-
-      res.status(200).json({
-        message: "User successfully added to group.",
-        data: result,
-      });
-    } catch (err: any) {
-      const msg = err.message || "Failed to add user to group.";
-      let statusCode = 400;
-
-      if (msg.includes("does not exist")) statusCode = 404;
-      if (msg.includes("Conversation not found")) statusCode = 404;
-      if (msg.includes("Only admins or owners")) statusCode = 403;
-
-      res.status(statusCode).json({ error: msg });
     }
   }
 

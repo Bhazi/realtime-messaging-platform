@@ -72,6 +72,8 @@ class MessengerStore {
   getCurrentUser(): User | null {
     const item = localStorage.getItem(this.currentUserKey);
 
+    console.log("reached here");
+
     if (item) {
       const data = JSON.parse(item);
 

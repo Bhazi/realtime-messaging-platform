@@ -4,6 +4,9 @@ import { FolderPlus, X, Plus, Trash2, Users } from "lucide-react";
 import { messengerStore } from "../../../messangerStore/messengerStore";
 import { User, Conversation } from "../../../types/types";
 
+import { userApi } from "../../../api/user.api";
+import { chatApi } from "../../../api/chat.api";
+
 interface CreateGroupDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -32,7 +35,8 @@ export const CreateGroupDialog: React.FC<CreateGroupDialogProps> = ({
     const cleanUid = memberUidInput.trim().toUpperCase();
     if (!cleanUid) return;
 
-    const user = await messengerStore.getUserByUid(cleanUid);
+    const user = await userApi.getUserByUid(cleanUid);
+
     if (!user) {
       setErrorMsg(`No user found with UID "${cleanUid}".`);
       return;
@@ -91,10 +95,9 @@ export const CreateGroupDialog: React.FC<CreateGroupDialogProps> = ({
     if (selectedImage) {
       formData.append("groupImage", selectedImage);
     }
-    console.log(currentUserId, "from the create group dialogue component");
 
     try {
-      const newGroup = await messengerStore.createGroupConversation(formData);
+      const newGroup = await chatApi.createGroupConversation(formData);
 
       onGroupCreated(newGroup);
       handleClose();
@@ -233,7 +236,6 @@ export const CreateGroupDialog: React.FC<CreateGroupDialogProps> = ({
                   </span>
                   <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2 bg-zinc-950/60 rounded-xl border border-zinc-800">
                     {addedUids.map((uid) => {
-                      console.log(uid);
                       const user = messengerStore.getUserByUid(uid);
                       return (
                         <div

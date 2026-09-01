@@ -143,28 +143,6 @@ export class ChatService {
     return await ChatModel.getMessages(conversationId, limit, cursor);
   }
 
-  static async addUserToGroup(
-    conversationId: string,
-    currentUserId: string,
-    targetUid: string,
-  ) {
-    if (!conversationId) {
-      throw new Error("conversationId is required.");
-    }
-    if (!currentUserId) {
-      throw new Error("currentUserId is required.");
-    }
-    if (!targetUid) {
-      throw new Error("targetUid is required.");
-    }
-
-    return await ChatModel.addUserToGroup(
-      conversationId,
-      currentUserId,
-      targetUid,
-    );
-  }
-
   static async deleteMessage(
     messageId: string,
     userId: string,

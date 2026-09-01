@@ -1,13 +1,6 @@
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
-import {
-  Settings,
-  Plus,
-  Users,
-  UserPlus,
-  FolderPlus,
-  LogOut,
-} from "lucide-react";
+import { Settings, Users, UserPlus, FolderPlus, LogOut } from "lucide-react";
 import { Conversation, User } from "../../../types/types";
 import { LumaLogo } from "../../../components/LumaLogo";
 
@@ -73,7 +66,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           />
           <div className="flex-1 truncate">
             <h4 className="text-s font-semibold text-white truncate">
-              {currentUser.displayName}
+              {currentUser.displayName.charAt(0).toUpperCase() +
+                currentUser.displayName.slice(1).toLowerCase()}
             </h4>
             <div className="flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -129,7 +123,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <div className="flex-1 text-left truncate">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-semibold truncate text-white">
-                          {chat.name}
+                          {chat.name
+                            ? chat.name.charAt(0).toUpperCase() +
+                              chat.name.slice(1).toLowerCase()
+                            : null}
                         </span>
                       </div>
                       <p className="text-[11px] text-zinc-500 truncate">

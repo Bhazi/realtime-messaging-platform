@@ -20,9 +20,11 @@ import { GroupMembersModal } from "./GroupMembersModal";
 
 import { motion } from "motion/react";
 
-import { messengerStore } from "../../../messangerStore/messengerStore";
-
 import { socket } from "../../../lib/socket";
+
+import { userApi } from "../../../api/user.api";
+
+import { chatApi } from "../../../api/chat.api";
 
 interface ChatAreaProps {
   conversation: Conversation;
@@ -95,7 +97,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         /*
          * Load existing messages.
          */
-        const result = await messengerStore.getMessages(conversation.id, {
+        const result = await chatApi.getMessages(conversation.id, {
           limit: 20,
         });
 
@@ -157,7 +159,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     socket.emit("join_conversation", conversation.id);
 
     console.log("🔌 Joined conversation:", conversation.id);
-
     /*
      * Leave when conversation changes
      * or component unmounts.
@@ -181,7 +182,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
      */
     const handleNewMessage = (message: Message) => {
       console.log("📨 New message received:", message);
-
       /*
        * Make sure this message belongs
        * to the currently open conversation.
@@ -242,7 +242,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     try {
       setIsLoadingMessages(true);
 
-      const result = await messengerStore.getMessages(conversation.id, {
+      const result = await chatApi.getMessages(conversation.id, {
         limit: 20,
         cursor: nextCursor,
       });
@@ -255,7 +255,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         const existingIds = new Set(prev.map((message) => message.id));
 
         const newMessages = result.messages.filter(
-          (message) => !existingIds.has(message.id),
+          (message: Message) => !existingIds.has(message.id),
         );
 
         return [...newMessages, ...prev];
@@ -318,14 +318,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
        * Backend saves message and
        * then broadcasts through Socket.IO.
        */
-      await messengerStore.sendMessage(
-        conversation.id,
-        currentUser.id,
-        "TEXT",
-        {
-          content: messageContent,
-        },
-      );
+      await chatApi.sendMessage(conversation.id, currentUser.id, "TEXT", {
+        content: messageContent,
+      });
 
       /*
        * Clear input.
@@ -359,7 +354,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
        * Still use HTTP/FormData for
        * the actual file upload.
        */
-      await messengerStore.sendMessage(conversation.id, currentUser.id, type, {
+      await chatApi.sendMessage(conversation.id, currentUser.id, type, {
         content: caption,
         file,
       });
@@ -382,7 +377,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   const handleDeleteMessage = async (messageId: string) => {
     try {
-      await messengerStore.deleteMessage(messageId, currentUser.id);
+      await chatApi.deleteMessage(messageId, currentUser.id);
 
       /*
        * Keep your current refresh
@@ -411,10 +406,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
 
     try {
-      await messengerStore.deleteGroupConversation(
-        conversation.id,
-        currentUser.id,
-      );
+      await userApi.deleteGroupConversation(conversation.id, currentUser.id);
 
       onRefresh();
     } catch (error) {

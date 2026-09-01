@@ -1,16 +1,9 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import {
-  Shield,
-  ShieldAlert,
-  UserMinus,
-  Plus,
-  X,
-  Crown,
-  UserCheck,
-} from "lucide-react";
-import { messengerStore } from "../../../messangerStore/messengerStore";
+import { Shield, ShieldAlert, UserMinus, Plus, X } from "lucide-react";
 import { Conversation, MemberRole, User } from "../../../types/types";
+
+import { userApi } from "../../../api/user.api";
 
 interface GroupMembersModalProps {
   isOpen: boolean;
@@ -37,8 +30,6 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
   const isOwner = currentUserMember?.role === "OWNER";
   const isAdmin = currentUserMember?.role === "ADMIN" || isOwner;
 
-  console.log("group member component rendered");
-
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
@@ -47,7 +38,7 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
     if (!newUidInput.trim()) return;
 
     try {
-      await messengerStore.addUserToGroup(
+      await userApi.addUserToGroup(
         conversation.id,
         currentUserId,
         newUidInput.trim(),
@@ -65,7 +56,7 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
     setSuccessMsg("");
 
     try {
-      await messengerStore.removeUserFromGroup(
+      await userApi.removeUserFromGroup(
         conversation.id,
         currentUserId,
         targetUserId,
@@ -85,7 +76,7 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
     setSuccessMsg("");
 
     try {
-      await messengerStore.updateGroupMemberRole(
+      await userApi.updateGroupMemberRole(
         conversation.id,
         currentUserId,
         targetUserId,
@@ -220,7 +211,7 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
                               : "bg-zinc-800 text-zinc-400"
                         }`}
                       >
-                        {member.role === "OWNER" && <Crown size={12} />}
+                        {member.role === "OWNER"}
                         {member.role === "ADMIN" && <Shield size={12} />}
                         {member.role}
                       </span>

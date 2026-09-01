@@ -19,16 +19,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
   const [errorMessage, setErrorMessage] = useState("");
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
 
-  console.log("Login: at the top");
-
-  useEffect(() => {
-    console.log("login up mounted");
-
-    return () => {
-      console.log("login unmounted");
-    };
-  }, []);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
@@ -47,21 +37,17 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
         password,
       });
 
-      // Save JWT token for authenticated requests
-      localStorage.setItem("auth_token", data.token);
-
       // Map backend database user payload to frontend store
       const foundUser: User = {
         id: data.user.id,
         uid: data.user.uid,
         username: data.user.username,
         email: data.user.email,
-        displayName: data.user.display_name,
-        avatarUrl: data.user.avatar_url,
-        createdAt: data.user.created_at,
+        displayName: data.user.displayName,
+        avatarUrl: data.user.avatarUrl,
+        createdAt: data.user.createdAt,
       };
 
-      messengerStore.setCurrentUser(foundUser);
       onLoginSuccess(foundUser);
       navigate("/app");
     } catch (error: any) {

@@ -17,6 +17,8 @@ import {
 import { User } from "../../../types/types";
 import { messengerStore } from "../../../messangerStore/messengerStore";
 
+import { userApi } from "../../../api/user.api";
+
 interface SettingsViewProps {
   currentUser: User;
   onLogout: () => void;
@@ -91,22 +93,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     formData.append("avatar", selectedImage);
 
     try {
-      const response = await fetch(
-        "http://localhost:5000/api/v1/profile/avatar",
-        {
-          method: "POST",
-          body: formData,
-        },
-      );
+      const user: User = await userApi.updateAvatar(formData);
 
       // Close modal after successful upload
       setIsModalOpen(false);
       setSelectedImage(null);
       setPreviewUrl(null);
 
-      const data = await response.json();
-
-      onCurrentUserChange(data.user);
+      onCurrentUserChange(user);
 
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
@@ -125,15 +119,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const updatedUser: User = await messengerStore.updateUserProfile(
-      currentUser.id,
-      {
-        displayName: displayName.trim(),
-        username: username.trim(),
-      },
-    );
-
-    messengerStore.setCurrentUser(updatedUser);
+    const updatedUser: User = await userApi.updateUserProfile(currentUser.id, {
+      displayName: displayName.trim(),
+      username: username.trim(),
+    });
 
     setIsSaved(true);
     onCurrentUserChange(updatedUser);
@@ -147,7 +136,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     e.preventDefault();
 
     // API calling for changing the password
-    await messengerStore.changePassword(currentUser.id, oldPass, newPass);
+    await userApi.changePassword(currentUser.id, oldPass, newPass);
 
     setPassSaved(true);
     setOldPass("");
@@ -228,7 +217,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
               <div>
                 <span className="text-xs font-semibold text-white block">
-                  {currentUser.displayName}
+                  {currentUser.displayName.charAt(0).toUpperCase() +
+                    currentUser.displayName.slice(1).toLowerCase()}
                 </span>
 
                 <span className="text-xs text-zinc-400">

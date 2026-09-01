@@ -4,6 +4,9 @@ import { Search, UserPlus, X, Check, Shield } from "lucide-react";
 import { messengerStore } from "../../../messangerStore/messengerStore";
 import { User } from "../../../types/types";
 
+import { userApi } from "../../../api/user.api";
+import { chatApi } from "../../../api/chat.api";
+
 interface AddUserDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -33,7 +36,7 @@ export const AddUserDialog: React.FC<AddUserDialogProps> = ({
       return;
     }
 
-    const found = await messengerStore.getUserByUid(uidInput.trim());
+    const found = await userApi.getUserByUid(uidInput.trim());
     if (!found) {
       setErrorMsg(`No user found with UID "${uidInput.trim().toUpperCase()}".`);
       return;
@@ -50,10 +53,7 @@ export const AddUserDialog: React.FC<AddUserDialogProps> = ({
   const handleAddUser = async () => {
     if (!searchedUser) return;
     try {
-      await messengerStore.createDirectConversation(
-        currentUserId,
-        searchedUser.uid,
-      );
+      await chatApi.createDirectConversation(currentUserId, searchedUser.uid);
       setIsSuccess(true);
       setTimeout(() => {
         onUserAdded(searchedUser);

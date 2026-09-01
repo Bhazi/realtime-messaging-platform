@@ -3,8 +3,8 @@ export default interface UserRow {
   uid: string;
   username: string;
   email: string;
-  display_name: string;
-  password_hash: string;
-  avatar_url: string;
-  created_at: Date;
+  displayName: string;
+  passwordHash: string;
+  avatarUrl: string;
+  createdAt: Date;
 }

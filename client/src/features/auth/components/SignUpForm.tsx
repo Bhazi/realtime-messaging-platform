@@ -54,15 +54,13 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSignUpSuccess }) => {
         uid: data.user.uid,
         username: data.user.username,
         email: data.user.email,
-        displayName: data.user.display_name,
-        avatarUrl: data.user.avatar_url,
-        createdAt: data.user.created_at,
+        displayName: data.user.displayName,
+        avatarUrl: data.user.avatarUrl,
+        createdAt: data.user.createdAt,
       };
 
-      messengerStore.setCurrentUser(newUser);
       onSignUpSuccess(newUser);
       navigate("/app");
-      console.log("signupForm: after the navigate('app')");
     } catch (error: any) {
       setErrorMessage(error.message);
     } finally {

@@ -2,6 +2,8 @@
 import { UserModel } from "../../models/user.model.js";
 import UserRow from "../../types/types.js";
 
+import { UserCache } from "../user/user.cache.js";
+
 export class UserService {
   static async getAllUsers() {
     return await UserModel.findAll();
@@ -20,7 +22,11 @@ export class UserService {
       throw new Error("userId is required.");
     }
 
-    return await UserModel.updateUserProfile(userId, updates);
+    const user: UserRow = await UserModel.updateUserProfile(userId, updates);
+
+    UserCache.updateUser(user);
+
+    return user;
   }
 
   static async changePassword(
@@ -42,7 +48,11 @@ export class UserService {
   }
 
   static async updateAvatar(userId: string, avatarUrl: string) {
-    return await UserModel.updateAvatarUrl(userId, avatarUrl);
+    const user: UserRow = await UserModel.updateAvatarUrl(userId, avatarUrl);
+
+    UserCache.updateUser(user);
+
+    return user;
   }
 
   static async deleteGroupConversation(conversationId: string, userId: string) {
@@ -53,15 +63,37 @@ export class UserService {
     return await UserModel.deleteGroupConversation(conversationId, userId);
   }
 
+  static async addUserToGroup(
+    conversationId: string,
+    currentUserId: string,
+    targetUid: string,
+  ) {
+    if (!conversationId) {
+      throw new Error("conversationId is required.");
+    }
+    if (!currentUserId) {
+      throw new Error("currentUserId is required.");
+    }
+    if (!targetUid) {
+      throw new Error("targetUid is required.");
+    }
+
+    return await UserModel.addUserToGroup(
+      conversationId,
+      currentUserId,
+      targetUid,
+    );
+  }
+
   static async updateGroupMemberRole(
     conversationId: string,
-    actorUserId: string,
+    currentUserId: string,
     targetUserId: string,
     newRole: string,
   ) {
-    if (!conversationId || !actorUserId || !targetUserId || !newRole) {
+    if (!conversationId || !currentUserId || !targetUserId || !newRole) {
       throw new Error(
-        "conversationId, actorUserId, targetUserId, and newRole are required.",
+        "conversationId, currentUserId, targetUserId, and newRole are required.",
       );
     }
 
@@ -73,7 +105,7 @@ export class UserService {
 
     return await UserModel.updateGroupMemberRole(
       conversationId,
-      actorUserId,
+      currentUserId,
       targetUserId,
       newRole,
     );
@@ -81,23 +113,45 @@ export class UserService {
 
   static async removeUserFromGroup(
     conversationId: string,
-    actorUserId: string,
+    currentUserId: string,
     targetUserId: string,
   ) {
-    if (!conversationId || !actorUserId || !targetUserId) {
+    if (!conversationId || !currentUserId || !targetUserId) {
       throw new Error(
-        "conversationId, actorUserId, and targetUserId are required.",
+        "conversationId, currentUserId, and targetUserId are required.",
       );
     }
 
-    if (actorUserId === targetUserId) {
+    if (currentUserId === targetUserId) {
       throw new Error("Use the leave group endpoint to remove yourself.");
     }
 
     return await UserModel.removeUserFromGroup(
       conversationId,
-      actorUserId,
+      currentUserId,
       targetUserId,
     );
+  }
+
+  static async getUser(userId: string) {
+    // 1. Check Redis first
+    const cachedUserResult = await UserCache.getUser(userId);
+
+    if (cachedUserResult) {
+      return cachedUserResult;
+    }
+
+    // 2. Redis miss → check database
+    const user = await this.getUserById(userId);
+
+    if (!user) {
+      return null;
+    }
+
+    // 3. Database hit → populate Redis
+    await UserCache.setUser(user, 60 * 60);
+
+    // 4. Return user
+    return user;
   }
 }

@@ -13,7 +13,11 @@ import chatRoutes from "./modules/chat/chat.routes.js";
 
 import { connectDB } from "./config/db.js";
 
+import { connectRedis } from "./config/redis.js";
+
 import { initializeChatSocket } from "./modules/chat/chat.socket.js";
+
+import cookieParser from "cookie-parser";
 
 const FRONTEND_URL = "http://localhost:5173";
 
@@ -37,6 +41,8 @@ app.use(
 );
 
 app.use(express.json());
+
+app.use(cookieParser());
 
 /*
  * Serve uploaded files.
@@ -62,11 +68,6 @@ app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/users", userRoutes);
 
 app.use("/api/v1/chat", chatRoutes);
-
-/*
- * Existing profile route.
- */
-app.use("/api/v1/profile", userRoutes);
 
 /*
  * =====================================================
@@ -128,8 +129,6 @@ const httpServer = createServer(app);
  * =====================================================
  */
 
-console.log("hi i am connected");
-
 const io = new Server(httpServer, {
   cors: {
     origin: FRONTEND_URL,
@@ -153,6 +152,8 @@ initializeChatSocket(io);
 
 httpServer.listen(PORT, async () => {
   await connectDB();
+
+  await connectRedis();
 
   console.log(`🚀 Messenger backend streaming on http://localhost:${PORT}`);
 

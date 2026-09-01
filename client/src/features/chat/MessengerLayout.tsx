@@ -1,4 +1,4 @@
-import React, { act, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Sidebar } from "../chat/components/Sidebar";
 import { ChatArea } from "../chat/components/ChatArea";
@@ -6,8 +6,8 @@ import { SettingsView } from "../chat/components/SettingsView";
 import { AddUserDialog } from "../chat/components/AddUserDialog";
 import { CreateGroupDialog } from "../../features/chat/components/CreateGroupDialog";
 import { User, Conversation } from "../../types/types";
-import { messengerStore } from "../../messangerStore/messengerStore";
 import { MessageSquare, ArrowLeft } from "lucide-react";
+import { chatApi } from "../../api/chat.api";
 
 interface MessengerLayoutProps {
   currentUser: User;
@@ -39,7 +39,7 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
 
   const loadConversations = async () => {
     try {
-      const result = await messengerStore.getConversations(currentUser.id);
+      const result = await chatApi.getConversations(currentUser.id);
       setConversations(result);
 
       if (conversationId) {
@@ -71,6 +71,8 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
 
   const handleUserAdded = async (user: User) => {
     const updatedConversations = await loadConversations();
+
+    console.log(updatedConversations, "from the messenger layout");
 
     const created = updatedConversations.find(
       (c) => c.type === "DIRECT" && c.members.some((m) => m.userId === user.id),

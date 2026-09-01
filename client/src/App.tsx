@@ -1,5 +1,4 @@
 import { MessengerLayout } from "./features/chat/MessengerLayout";
-import { messengerStore } from "./messangerStore/messengerStore";
 import { LoginForm } from "./features/auth/components/LoginForm";
 import React, { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
@@ -7,12 +6,30 @@ import { AuthLayout } from "./features/auth/AuthLayout";
 import { SignUpForm } from "./features/auth/components/SignUpForm";
 import { User } from "./types/types";
 import { socket } from "./lib/socket";
+import { userApi } from "./api/user.api";
+import MessengerLayoutSkeleton from "./features/chat/messengerLayoutSkeleton";
+import { authApi } from "./api/auth.api";
 import "./index.css";
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    return messengerStore.getCurrentUser();
-  });
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isLoadingUser, setIsLoadingUser] = useState(true);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const user = await userApi.me();
+
+        setCurrentUser(user);
+      } catch (error) {
+        setCurrentUser(null);
+      } finally {
+        setIsLoadingUser(false);
+      }
+    };
+
+    loadUser();
+  }, []);
 
   useEffect(() => {
     socket.connect();
@@ -40,11 +57,23 @@ export default function App() {
     setCurrentUser(user);
   };
 
-  const handleLogout = () => {
-    setCurrentUser(null);
-    localStorage.removeItem("auth_token");
-    localStorage.removeItem("luma_user");
+  const handleLogout = async () => {
+    try {
+      await authApi.logout();
+    } catch (error) {
+      console.error("Logout failed:", error);
+    } finally {
+      setCurrentUser(null);
+    }
   };
+
+  // Wait for the /me API call before rendering the router.
+  // This prevents currentUser === null from causing
+  // an unwanted redirect to /login during the initial load.
+
+  if (isLoadingUser) {
+    return <MessengerLayoutSkeleton />;
+  }
 
   return (
     <BrowserRouter>

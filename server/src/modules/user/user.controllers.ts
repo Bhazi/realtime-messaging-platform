@@ -2,6 +2,8 @@
 import { Request, Response } from "express";
 import { UserService } from "./user.services.js";
 
+import type { AuthenticatedRequest } from "../../middlewares/auth.middleware.js";
+
 export class UserController {
   static async getUsers(req: Request, res: Response): Promise<void> {
     try {
@@ -10,6 +12,31 @@ export class UserController {
       res.status(200).json({ users });
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Failed to fetch users." });
+    }
+  }
+
+  static async me(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const { userId } = req.auth;
+
+      const user = await UserService.getUser(userId);
+
+      if (!user) {
+        res.status(404).json({
+          message: "User not found.",
+        });
+        return;
+      }
+
+      res.status(200).json({
+        user,
+      });
+    } catch (error) {
+      console.error("UserController.me error:", error);
+
+      res.status(500).json({
+        message: "Internal server error.",
+      });
     }
   }
 
@@ -167,8 +194,6 @@ export class UserController {
       const { conversationId } = req.params;
       const currentUserId = (req as any).user?.id || req.body?.currentUserId;
 
-      console.log(req.body, conversationId, currentUserId);
-
       if (!currentUserId) {
         res.status(400).json({ error: "currentUserId is required." });
         return;
@@ -207,14 +232,14 @@ export class UserController {
   ): Promise<void> {
     try {
       const { conversationId } = req.params;
-      const { actorUserId, targetUserId, newRole } = req.body;
+      const { currentUserId, targetUserId, newRole } = req.body;
 
-      // Alternatively, extract actorUserId from authenticated session/JWT middleware:
-      // const actorUserId = (req as any).user?.id;
+      // Alternatively, extract currentUserId from authenticated session/JWT middleware:
+      // const currentUserId = (req as any).user?.id;
 
       const updatedMember = await UserService.updateGroupMemberRole(
         conversationId,
-        actorUserId,
+        currentUserId,
         targetUserId,
         newRole,
       );
@@ -234,20 +259,52 @@ export class UserController {
     }
   }
 
+  static async addUserToGroup(req: Request, res: Response): Promise<void> {
+    try {
+      const { conversationId, currentUserId: bodyUserId, targetUid } = req.body;
+      const currentUserId = (req as any).user?.id || bodyUserId;
+
+      if (!currentUserId) {
+        res.status(400).json({ error: "currentUserId is required." });
+        return;
+      }
+
+      const result = await UserService.addUserToGroup(
+        conversationId,
+        currentUserId,
+        targetUid,
+      );
+
+      res.status(200).json({
+        message: "User successfully added to group.",
+        data: result,
+      });
+    } catch (err: any) {
+      const msg = err.message || "Failed to add user to group.";
+      let statusCode = 400;
+
+      if (msg.includes("does not exist")) statusCode = 404;
+      if (msg.includes("Conversation not found")) statusCode = 404;
+      if (msg.includes("Only admins or owners")) statusCode = 403;
+
+      res.status(statusCode).json({ error: msg });
+    }
+  }
+
   /**
    * DELETE /api/v1/chat/groups/:conversationId/members/:targetUserId
    */
   static async removeUserFromGroup(req: Request, res: Response): Promise<void> {
     try {
       const { conversationId, targetUserId } = req.params;
-      const { actorUserId } = req.body;
+      const { currentUserId } = req.body;
 
-      // Alternatively, extract actorUserId from authenticated request context:
-      // const actorUserId = (req as any).user?.id;
+      // Alternatively, extract currentUserId from authenticated request context:
+      // const currentUserId = (req as any).user?.id;
 
       const removedMember = await UserService.removeUserFromGroup(
         conversationId,
-        actorUserId,
+        currentUserId,
         targetUserId,
       );
 

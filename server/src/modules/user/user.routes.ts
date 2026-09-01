@@ -1,41 +1,57 @@
 import { Router } from "express";
 import { UserController } from "./user.controllers.js";
-import { uploadAvatar, uploadGroupImage } from "../../middlewares/uploads.js";
-import { uploadChatAttachment } from "../../middlewares/uploads.js";
+import { uploadAvatar } from "../../middlewares/uploads.js";
+import { authMiddleware } from "../../middlewares/auth.middleware.js";
 
 const router = Router();
 
-router.get("/", UserController.getUsers);
+// Add user to group endpoint
+router.post("/group/add-user", authMiddleware, UserController.addUserToGroup);
 
-// GET user by primary key ID: /api/v1/user/id/123e4567-e89b-12d3-a456-426614174000
-router.get("/id/:id", UserController.getUserById);
-
-// GET user by public UID: /api/v1/user/uid/8KX4P92M
-router.get("/uid/:uid", UserController.getUserByUid);
-
-router.post("/profile/update", UserController.updateUserProfile);
-
-router.post("/password/change", UserController.changePassword);
-
-router.post(
-  "/avatar",
-  uploadAvatar.single("avatar"), // Expects formData field name to be 'avatar'
-  UserController.updateAvatar,
-);
+router.post("/password/change", authMiddleware, UserController.changePassword);
 
 // Delete / Dissolve Group Route
-router.delete("/group/:conversationId", UserController.deleteGroupConversation);
-
-// Update Group Member Role Route
-router.patch(
-  "/groups/:conversationId/members/role",
-  UserController.updateGroupMemberRole,
+router.delete(
+  "/group/:conversationId",
+  authMiddleware,
+  UserController.deleteGroupConversation,
 );
+
+router.get("/", authMiddleware, UserController.getUsers);
+
+// GET user by primary key ID: /api/v1/user/id/123e4567-e89b-12d3-a456-426614174000
+router.get("/id/:id", authMiddleware, UserController.getUserById);
+
+// GET user by public UID: /api/v1/user/uid/8KX4P92M
+router.get("/uid/:uid", authMiddleware, UserController.getUserByUid);
+
+router.get("/me", authMiddleware, UserController.me);
 
 // Remove user from group route
 router.delete(
   "/groups/:conversationId/members/:targetUserId",
+  authMiddleware,
   UserController.removeUserFromGroup,
+);
+
+router.post(
+  "/profile/avatar",
+  authMiddleware,
+  uploadAvatar.single("avatar"), // Expects formData field name to be 'avatar'
+  UserController.updateAvatar,
+);
+
+// Update Group Member Role Route
+router.patch(
+  "/groups/:conversationId/members/role",
+  authMiddleware,
+  UserController.updateGroupMemberRole,
+);
+
+router.post(
+  "/profile/update",
+  authMiddleware,
+  UserController.updateUserProfile,
 );
 
 export default router;
