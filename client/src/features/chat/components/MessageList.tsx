@@ -51,6 +51,8 @@ export const MessageList: React.FC<MessageListProps> = ({
     type: MessageType;
   } | null>(null);
 
+  const [visibleDate, setVisibleDate] = useState<string | null>(null);
+
   /*
    * Main scroll container.
    */
@@ -329,6 +331,68 @@ export const MessageList: React.FC<MessageListProps> = ({
    * ============================================================
    */
 
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+
+    if (!container || messages.length === 0) {
+      return;
+    }
+
+    const messageElements = Array.from(
+      container.querySelectorAll("[data-message-date]"),
+    );
+
+    if (messageElements.length === 0) {
+      return;
+    }
+
+    const handleScroll = () => {
+      const containerTop = container.getBoundingClientRect().top;
+
+      let currentDate: string | null = null;
+
+      for (const element of messageElements) {
+        const rect = element.getBoundingClientRect();
+
+        /*
+         * Find the last message that has passed
+         * the top of the scroll container.
+         */
+        if (rect.top <= containerTop + 60) {
+          currentDate = element.getAttribute("data-message-date");
+        }
+      }
+
+      /*
+       * If we haven't passed any message yet,
+       * use the first message's date.
+       */
+      if (!currentDate) {
+        currentDate = messageElements[0].getAttribute("data-message-date");
+      }
+
+      setVisibleDate(currentDate);
+    };
+
+    handleScroll();
+
+    container.addEventListener("scroll", handleScroll, {
+      passive: true,
+    });
+
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+    };
+  }, [messages]);
+
+  const formatMessageDate = (isoString: string) => {
+    const date = new Date(isoString);
+
+    console.log(date.toLocaleDateString("en-UK"));
+
+    return date.toLocaleDateString("en-UK");
+  };
+
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024 * 1024) {
       return `${(bytes / 1024).toFixed(0)} KB`;
@@ -339,6 +403,8 @@ export const MessageList: React.FC<MessageListProps> = ({
 
   const formatTime = (isoString: string) => {
     const d = new Date(isoString);
+
+    // setDate(d.toLocaleDateString());
 
     return d.toLocaleTimeString([], {
       hour: "2-digit",
@@ -379,11 +445,23 @@ export const MessageList: React.FC<MessageListProps> = ({
   return (
     <motion.div
       ref={scrollContainerRef}
-      className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4"
+      className="relative min-h-0 flex-1 overflow-y-auto p-4 sm:p-0 space-y-4"
       variants={messageContainerVariants}
       initial="hidden"
       animate="visible"
     >
+      {/* ===================================================== */}
+      {/* STICKY DATE */}
+      {/* ===================================================== */}
+      {messages.length > 0 && (
+        <div className="sticky top-0 z-30 flex h-0 justify-center pointer-events-none">
+          <div className="relative top-2 flex h-[25px] min-w-[110px] items-center justify-center rounded-full border border-white/30 bg-zinc-800 px-4 shadow-sm">
+            <span className="text-xs font-normal whitespace-nowrap text-white">
+              {visibleDate}
+            </span>
+          </div>
+        </div>
+      )}
       {/* ===================================================== */}
       {/* LOADING OLDER MESSAGES */}
       {/* ===================================================== */}
@@ -442,11 +520,15 @@ export const MessageList: React.FC<MessageListProps> = ({
 
           const canDelete = !isDeleted && (isSelf || canManageMessages);
 
+          const messageDate = formatMessageDate(msg.createdAt);
+
           return (
             <motion.div
               key={msg.id}
+              data-message-date={messageDate}
+              data-message-id={msg.id}
               variants={messageVariants}
-              className={`flex gap-3 group ${
+              className={`flex gap-3 px-4 py-2 mb-2 group ${
                 isSelf ? "flex-row-reverse" : "flex-row"
               }`}
             >
@@ -454,7 +536,7 @@ export const MessageList: React.FC<MessageListProps> = ({
               <img
                 src={`http://localhost:5000${msg.sender?.avatarUrl}`}
                 alt={msg.sender?.displayName || "Sender"}
-                className="w-8 h-8 rounded-full object-cover border border-zinc-700 flex-shrink-0 mt-1"
+                className="w-8 h-9 rounded-full object-cover border border-zinc-700 flex-shrink-0 mt-1"
               />
 
               <div
@@ -469,10 +551,10 @@ export const MessageList: React.FC<MessageListProps> = ({
                   }`}
                 >
                   <span className="font-semibold text-zinc-300">
-                    {isSelf ? "You" : msg.sender?.displayName || "User"}
+                    {isSelf ? "" : msg.sender?.displayName || "User"}
                   </span>
 
-                  <span>•</span>
+                  <span>{isSelf ? "" : "•"}</span>
 
                   <span>{formatTime(msg.createdAt)}</span>
                 </div>
