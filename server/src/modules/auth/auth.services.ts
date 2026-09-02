@@ -2,14 +2,13 @@ import argon2 from "argon2";
 import { UserModel } from "../../models/user.model.js";
 import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
-import UserRow from "../../types/types.js";
 
 import { UserCache } from "../user/user.cache.js";
 import { AuthSession, AuthSessionCache } from "./auth.session.cache.js";
 
 import { TokenService } from "./token.services.js";
 
-const JWT_SECRET: string | undefined = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET!;
 
 if (!JWT_SECRET) {
   throw new Error("JWT_SECRET is not configured");

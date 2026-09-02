@@ -81,13 +81,13 @@ export class ChatModel {
   /**
    * Unhide a conversation for a specific user if it was hidden
    */
-  static async unhideForUser(
+  static async unhideAndUnleftForUser(
     conversationId: string,
     userId: string,
   ): Promise<void> {
     const query = `
       UPDATE conversation_members
-      SET hidden_at = NULL
+      SET hidden_at = NULL, left_at = NULL
       WHERE conversation_id = $1 AND user_id = $2;
     `;
     await pool.query(query, [conversationId, userId]);
@@ -249,8 +249,6 @@ export class ChatModel {
                     ON u2.id = cm2.user_id
                 WHERE cm2.conversation_id = c.id
                   AND cm2.user_id != $1
-                  AND cm2.left_at IS NULL
-                  AND cm2.hidden_at IS NULL
                 ORDER BY cm2.joined_at ASC
                 LIMIT 1
             )
@@ -265,8 +263,6 @@ export class ChatModel {
                     ON u2.id = cm2.user_id
                 WHERE cm2.conversation_id = c.id
                   AND cm2.user_id != $1
-                  AND cm2.left_at IS NULL
-                  AND cm2.hidden_at IS NULL
                 ORDER BY cm2.joined_at ASC
                 LIMIT 1
             )

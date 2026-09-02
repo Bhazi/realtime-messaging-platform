@@ -15,7 +15,6 @@ import {
   X,
 } from "lucide-react";
 import { User } from "../../../types/types";
-import { messengerStore } from "../../../messangerStore/messengerStore";
 
 import { userApi } from "../../../api/user.api";
 
@@ -156,9 +155,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       className="flex-1 h-full bg-black text-zinc-100 p-6 sm:p-10 overflow-y-auto selection:bg-indigo-500 selection:text-white"
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: "easeOut" }}
+      transition={{ duration: 0.4, ease: "easeOut" }}
+      onClick={() => navigate("/app")}
     >
-      <div className="max-w-2xl mx-auto space-y-8">
+      <div
+        className="max-w-2xl mx-auto space-y-8"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Back Button & Header */}
         <div className="flex items-center gap-4">
           <button

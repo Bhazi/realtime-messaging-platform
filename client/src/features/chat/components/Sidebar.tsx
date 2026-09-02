@@ -4,6 +4,8 @@ import { Settings, Users, UserPlus, FolderPlus, LogOut } from "lucide-react";
 import { Conversation, User } from "../../../types/types";
 import { LumaLogo } from "../../../components/LumaLogo";
 
+import { motion } from "framer-motion";
+
 interface SidebarProps {
   currentUser: User;
   conversations: Conversation[];
@@ -80,124 +82,161 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Main Lists Section */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-6">
-        {/* PERSONAL CHATS SECTION */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between px-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-              Personal
-            </span>
-            <button
-              onClick={onOpenAddUser}
-              title="Add user by UID"
-              className="p-1 rounded-lg text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors flex items-center gap-1 text-[11px] font-medium cursor-pointer"
-            >
-              <UserPlus size={13} />
-              <span>Add</span>
-            </button>
-          </div>
 
-          <div className="space-y-1">
-            {personalChats.length === 0 ? (
-              <p className="px-2 py-2 text-xs text-zinc-600 italic">
-                No personal chats. Click + Add to connect.
-              </p>
-            ) : (
-              personalChats.map((chat) => {
-                const isActive = chat.id === activeConversationId;
-                return (
-                  <button
-                    key={chat.id}
-                    onClick={() => onSelectConversation(chat.id)}
-                    className={`w-full p-2.5 rounded-2xl flex items-center gap-3 transition-all cursor-pointer ${
-                      isActive
-                        ? "bg-indigo-600/20 border border-indigo-500/50 text-white shadow-lg shadow-indigo-600/10"
-                        : "text-zinc-300 hover:bg-zinc-900 border border-transparent"
-                    }`}
-                  >
-                    <img
-                      src={`http://localhost:5000${chat.avatarUrl}`}
-                      alt={chat.name}
-                      className="w-9 h-9 rounded-full object-cover border border-zinc-700 flex-shrink-0"
-                    />
-                    <div className="flex-1 text-left truncate">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold truncate text-white">
-                          {chat.name
-                            ? chat.name.charAt(0).toUpperCase() +
-                              chat.name.slice(1).toLowerCase()
-                            : null}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-zinc-500 truncate">
-                        {renderLastMessageSnippet(chat.lastMessage) ||
-                          "Direct chat"}
-                      </p>
-                    </div>
-                  </button>
-                );
-              })
-            )}
+      <div className="flex-1 overflow-y-auto p-3 space-y-6">
+        <motion.div
+          initial={{ opacity: 0, y: -15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: "easeOut" }}
+        >
+          {/* PERSONAL CHATS SECTION */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+                Personal
+              </span>
+              <button
+                onClick={onOpenAddUser}
+                title="Add user by UID"
+                className="p-1 rounded-lg text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors flex items-center gap-1 text-[11px] font-medium cursor-pointer"
+              >
+                <UserPlus size={13} />
+                <span>Add</span>
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              {personalChats.length === 0 ? (
+                <p className="px-2 py-2 text-xs text-zinc-600 italic">
+                  No personal chats. Click + Add to connect.
+                </p>
+              ) : (
+                personalChats.map((chat, index) => {
+                  const isActive = chat.id === activeConversationId;
+                  return (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{
+                        duration: 0.25,
+                        ease: "easeOut",
+                        delay: index * 0.1,
+                      }}
+                    >
+                      <button
+                        key={chat.id}
+                        onClick={() => onSelectConversation(chat.id)}
+                        className={`w-full p-2.5 rounded-2xl flex items-center gap-3 transition-all cursor-pointer ${
+                          isActive
+                            ? "bg-indigo-600/20 border border-indigo-500/50 text-white shadow-lg shadow-indigo-600/10"
+                            : "text-zinc-300 hover:bg-zinc-900 border border-transparent"
+                        }`}
+                      >
+                        <img
+                          src={`http://localhost:5000${chat.avatarUrl}`}
+                          alt={chat.name}
+                          className="w-9 h-9 rounded-full object-cover border border-zinc-700 flex-shrink-0"
+                        />
+                        <div className="flex-1 text-left truncate">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold truncate text-white">
+                              {chat.name
+                                ? chat.name.charAt(0).toUpperCase() +
+                                  chat.name.slice(1).toLowerCase()
+                                : null}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-zinc-500 truncate">
+                            {renderLastMessageSnippet(chat.lastMessage) ||
+                              "Direct chat"}
+                          </p>
+                        </div>
+                      </button>
+                    </motion.div>
+                  );
+                })
+              )}
+            </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* GROUPS CHATS SECTION */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between px-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-              Groups
-            </span>
-            <button
-              onClick={onOpenCreateGroup}
-              title="Create new group"
-              className="p-1 rounded-lg text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 transition-colors flex items-center gap-1 text-[11px] font-medium cursor-pointer"
-            >
-              <FolderPlus size={13} />
-              <span>New</span>
-            </button>
-          </div>
+        <motion.div
+          initial={{ opacity: 0, y: -15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{
+            duration: 0.35,
+            ease: "easeOut",
+            delay: 0.7,
+          }}
+        >
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+                Groups
+              </span>
+              <button
+                onClick={onOpenCreateGroup}
+                title="Create new group"
+                className="p-1 rounded-lg text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 transition-colors flex items-center gap-1 text-[11px] font-medium cursor-pointer"
+              >
+                <FolderPlus size={13} />
+                <span>New</span>
+              </button>
+            </div>
 
-          <div className="space-y-1">
-            {groupChats.length === 0 ? (
-              <p className="px-2 py-2 text-xs text-zinc-600 italic">
-                No groups. Click + New to create one.
-              </p>
-            ) : (
-              groupChats.map((chat) => {
-                const isActive = chat.id === activeConversationId;
-                return (
-                  <button
-                    key={chat.id}
-                    onClick={() => onSelectConversation(chat.id)}
-                    className={`w-full p-2.5 rounded-2xl flex items-center gap-3 transition-all cursor-pointer ${
-                      isActive
-                        ? "bg-purple-600/20 border border-purple-500/50 text-white shadow-lg shadow-purple-600/10"
-                        : "text-zinc-300 hover:bg-zinc-900 border border-transparent"
-                    }`}
-                  >
-                    <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center font-bold text-xs flex-shrink-0">
-                      <Users size={16} />
-                    </div>
-                    <div className="flex-1 text-left truncate">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold truncate text-white">
-                          {chat.name}
-                        </span>
-                        <span className="text-[10px] text-zinc-500">
-                          {chat.members.length}m
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-zinc-500 truncate">
-                        {renderLastMessageSnippet(chat.lastMessage) ||
-                          "Group workspace"}
-                      </p>
-                    </div>
-                  </button>
-                );
-              })
-            )}
+            <div className="space-y-1">
+              {groupChats.length === 0 ? (
+                <p className="px-2 py-2 text-xs text-zinc-600 italic">
+                  No groups. Click + New to create one.
+                </p>
+              ) : (
+                groupChats.map((chat, index) => {
+                  const isActive = chat.id === activeConversationId;
+                  return (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{
+                        duration: 0.25,
+                        ease: "easeOut",
+                        delay: index * 0.1,
+                      }}
+                    >
+                      <button
+                        key={chat.id}
+                        onClick={() => onSelectConversation(chat.id)}
+                        className={`w-full p-2.5 rounded-2xl flex items-center gap-3 transition-all cursor-pointer ${
+                          isActive
+                            ? "bg-purple-600/20 border border-purple-500/50 text-white shadow-lg shadow-purple-600/10"
+                            : "text-zinc-300 hover:bg-zinc-900 border border-transparent"
+                        }`}
+                      >
+                        <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center font-bold text-xs flex-shrink-0">
+                          <Users size={16} />
+                        </div>
+                        <div className="flex-1 text-left truncate">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold truncate text-white">
+                              {chat.name}
+                            </span>
+                            <span className="text-[10px] text-zinc-500">
+                              {chat.members.length}m
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-zinc-500 truncate">
+                            {renderLastMessageSnippet(chat.lastMessage) ||
+                              "Group workspace"}
+                          </p>
+                        </div>
+                      </button>
+                    </motion.div>
+                  );
+                })
+              )}
+            </div>
           </div>
-        </div>
+        </motion.div>
       </div>
 
       {/* Logout Footer */}

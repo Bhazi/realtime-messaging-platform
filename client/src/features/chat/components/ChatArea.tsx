@@ -15,7 +15,6 @@ import { Conversation, MessageType, Message, User } from "../../../types/types";
 import { MessageList } from "./MessageList";
 
 import { FileUploadModal } from "./FileUploadModal";
-
 import { GroupMembersModal } from "./GroupMembersModal";
 
 import { motion } from "motion/react";
@@ -23,8 +22,9 @@ import { motion } from "motion/react";
 import { socket } from "../../../lib/socket";
 
 import { userApi } from "../../../api/user.api";
-
 import { chatApi } from "../../../api/chat.api";
+
+import { RemoveChatModal } from "./RemoveChat";
 
 interface ChatAreaProps {
   conversation: Conversation;
@@ -44,6 +44,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
    */
 
   const [textMessage, setTextMessage] = useState("");
+
+  const [isRemoveModalOpen, setIsRemoveModalOpen] = useState(false);
 
   const [uploadModalType, setUploadModalType] = useState<MessageType | null>(
     null,
@@ -158,7 +160,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
      */
     socket.emit("join_conversation", conversation.id);
 
-    console.log("🔌 Joined conversation:", conversation.id);
+    console.log("Joined conversation:", conversation.id);
     /*
      * Leave when conversation changes
      * or component unmounts.
@@ -166,7 +168,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     return () => {
       socket.emit("leave_conversation", conversation.id);
 
-      console.log("🔌 Left conversation:", conversation.id);
+      console.log("Left conversation:", conversation.id);
     };
   }, [conversation.id]);
 
@@ -181,7 +183,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
      * Handle message received from backend.
      */
     const handleNewMessage = (message: Message) => {
-      console.log("📨 New message received:", message);
+      console.log("New message received:", message);
       /*
        * Make sure this message belongs
        * to the currently open conversation.
@@ -399,19 +401,23 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
    */
 
   const handleDeleteConversation = async () => {
-    if (
-      !confirm("Are you sure you want to remove this chat from your account?")
-    ) {
-      return;
-    }
+    setIsRemoveModalOpen(true);
+  };
 
+  const handleRemoveChat = async () => {
     try {
-      await userApi.deleteGroupConversation(conversation.id, currentUser.id);
+      if (conversation.type === "GROUP") {
+        await userApi.deleteGroupConversation(conversation.id, currentUser.id);
+      } else {
+        await userApi.deleteDirectConversation(conversation.id, currentUser.id);
+      }
 
       onRefresh();
     } catch (error) {
       console.error("Failed to delete conversation:", error);
     }
+    // Remove chat logic here
+    setIsRemoveModalOpen(false);
   };
 
   /*
@@ -430,7 +436,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         opacity: 1,
       }}
       transition={{
-        duration: 0.25,
+        duration: 0.4,
         ease: "easeOut",
       }}
     >
@@ -442,7 +448,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         className="px-6 py-4 bg-zinc-950/90 border-b border-zinc-800/80 flex items-center justify-between z-10 backdrop-blur-md"
         initial={{
           opacity: 0,
-          y: -15,
+          y: -10,
         }}
         animate={{
           opacity: 1,
@@ -465,10 +471,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               <h2 className="text-sm sm:text-base font-bold text-white">
                 {conversation.name}
               </h2>
-
-              <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">
-                {conversation.type}
-              </span>
             </div>
 
             <p className="text-xs text-zinc-400">
@@ -533,7 +535,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           y: 0,
         }}
         transition={{
-          duration: 0.3,
+          duration: 0,
           ease: "easeOut",
         }}
       >
@@ -692,6 +694,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           onGroupUpdated={onRefresh}
         />
       )}
+
+      {/* ================================================= */}
+      {/* Remove chat Model */}
+      {/* ================================================= */}
+
+      {
+        <RemoveChatModal
+          isOpen={isRemoveModalOpen}
+          onConfirm={handleRemoveChat}
+          onCancel={() => setIsRemoveModalOpen(false)}
+        />
+      }
     </motion.div>
   );
 };

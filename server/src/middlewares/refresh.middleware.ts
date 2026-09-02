@@ -7,14 +7,6 @@ import { AuthSessionCache } from "../modules/auth/auth.session.cache.js";
 
 const REFRESH_COOKIE_NAME = "refresh_token";
 
-export interface RefreshAuthenticatedRequest extends Request {
-  auth: {
-    userId: string;
-    sessionId: string;
-    remainingTTL: number;
-  };
-}
-
 export async function refreshTokenMiddleware(
   req: Request,
   res: Response,
@@ -75,7 +67,7 @@ export async function refreshTokenMiddleware(
     const remainingTTL = Math.floor((session.expiresAt - Date.now()) / 1000);
 
     // Attach validated authentication information
-    (req as RefreshAuthenticatedRequest).auth = {
+    req.refreshAuth = {
       userId: decoded.sub,
       sessionId,
       remainingTTL,

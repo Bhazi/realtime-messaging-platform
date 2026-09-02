@@ -387,6 +387,86 @@ export class UserModel {
   }
 
   /**
+   * Deletes / Dissolves a direct conversation.
+   * Current user can delete direct conversation
+   */
+  static async deleteDirectConversation(
+    conversationId: string,
+    userId: string,
+  ) {
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      // 1. Fetch conversation & verify it is a Direct
+      const convQuery = `
+        SELECT type 
+        FROM conversations 
+        WHERE id = $1;
+      `;
+      const convRes = await client.query(convQuery, [conversationId]);
+
+      if (convRes.rows.length === 0) {
+        throw new Error("Conversation not found.");
+      }
+
+      const conversation = convRes.rows[0];
+
+      if (conversation.type !== "DIRECT") {
+        throw new Error(
+          "This operation is only valid for DIRECT conversations.",
+        );
+      }
+
+      // 2. Fetch actor membership details
+      const memberQuery = `
+        SELECT role, left_at 
+        FROM conversation_members
+        WHERE conversation_id = $1 AND user_id = $2;
+      `;
+      const memberRes = await client.query(memberQuery, [
+        conversationId,
+        userId,
+      ]);
+
+      if (memberRes.rows.length === 0) {
+        throw new Error("User is not a member of this conversation.");
+      }
+
+      // Mark all active members as having left and hidden the chat
+      await client.query(
+        `UPDATE conversation_members
+            SET 
+              left_at = CURRENT_TIMESTAMP,
+              hidden_at = CURRENT_TIMESTAMP
+            WHERE conversation_id = $1 AND user_id = $2;
+          `,
+        [conversationId, userId],
+      );
+
+      // Update conversation state (optional: add a metadata field or timestamp)
+      await client.query(
+        `UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1;`,
+        [conversationId],
+      );
+
+      await client.query("COMMIT");
+
+      return {
+        conversationId,
+        dissolved: true,
+        message: "Direct chat dissolved successfully for all members.",
+      };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * Updates a member's role in a group conversation.
    * Only the OWNER can change roles.
    */

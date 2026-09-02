@@ -69,6 +69,24 @@ export const userApi = {
     }
   },
 
+  deleteDirectConversation: async (
+    conversationId: string,
+    currentUserId: string,
+  ): Promise<void> => {
+    const response = await apiFetch(`/users/direct/${conversationId}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentUserId }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(
+        errorData.error || "Failed to delete direct conversation.",
+      );
+    }
+  },
+
   getUsers: async () => {
     const token = localStorage.getItem("auth_token");
 

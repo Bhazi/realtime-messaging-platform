@@ -40,6 +40,7 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
   const loadConversations = async () => {
     try {
       const result = await chatApi.getConversations(currentUser.id);
+
       setConversations(result);
 
       if (conversationId) {
@@ -50,7 +51,7 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
         setActiveConversation(result[0] ?? null);
       }
 
-      // return result;
+      return result;
     } catch (error) {
       console.error("Failed to load conversations:", error);
       return [];
@@ -71,8 +72,6 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
 
   const handleUserAdded = async (user: User) => {
     const updatedConversations = await loadConversations();
-
-    console.log(updatedConversations, "from the messenger layout");
 
     const created = updatedConversations.find(
       (c) => c.type === "DIRECT" && c.members.some((m) => m.userId === user.id),

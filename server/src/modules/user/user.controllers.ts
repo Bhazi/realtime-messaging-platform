@@ -2,8 +2,6 @@
 import { Request, Response } from "express";
 import { UserService } from "./user.services.js";
 
-import type { AuthenticatedRequest } from "../../middlewares/auth.middleware.js";
-
 export class UserController {
   static async getUsers(req: Request, res: Response): Promise<void> {
     try {
@@ -15,9 +13,9 @@ export class UserController {
     }
   }
 
-  static async me(req: AuthenticatedRequest, res: Response): Promise<void> {
+  static async me(req: Request, res: Response): Promise<void> {
     try {
-      const { userId } = req.auth;
+      const { userId } = req.auth!;
 
       const user = await UserService.getUser(userId);
 
@@ -191,7 +189,7 @@ export class UserController {
     res: Response,
   ): Promise<void> {
     try {
-      const { conversationId } = req.params;
+      const { conversationId } = req.params as { conversationId: string };
       const currentUserId = (req as any).user?.id || req.body?.currentUserId;
 
       if (!currentUserId) {
@@ -223,6 +221,43 @@ export class UserController {
     }
   }
 
+  static async deleteDirectConversation(
+    req: Request,
+    res: Response,
+  ): Promise<void> {
+    try {
+      const { conversationId } = req.params as { conversationId: string };
+      const currentUserId = (req as any).user?.id || req.body?.currentUserId;
+
+      if (!currentUserId) {
+        res.status(400).json({ error: "currentUserId is required." });
+        return;
+      }
+
+      const result = await UserService.deleteDirectConversation(
+        conversationId,
+        currentUserId,
+      );
+
+      // Socket event emission if real-time notifications are enabled
+      // if (result.dissolved) {
+      //   io.to(conversationId).emit("group_dissolved", { conversationId });
+      // }
+
+      res.status(200).json({
+        message: result.message,
+        data: result,
+      });
+    } catch (err: any) {
+      let statusCode = 400;
+      if (err.message.includes("not found")) statusCode = 404;
+
+      res
+        .status(statusCode)
+        .json({ error: err.message || "Failed to delete direct chat." });
+    }
+  }
+
   /**
    * PATCH /api/v1/chat/groups/:conversationId/members/role
    */
@@ -231,7 +266,7 @@ export class UserController {
     res: Response,
   ): Promise<void> {
     try {
-      const { conversationId } = req.params;
+      const { conversationId } = req.params as { conversationId: string };
       const { currentUserId, targetUserId, newRole } = req.body;
 
       // Alternatively, extract currentUserId from authenticated session/JWT middleware:
@@ -296,7 +331,10 @@ export class UserController {
    */
   static async removeUserFromGroup(req: Request, res: Response): Promise<void> {
     try {
-      const { conversationId, targetUserId } = req.params;
+      const { conversationId, targetUserId } = req.params as {
+        conversationId: string;
+        targetUserId: string;
+      };
       const { currentUserId } = req.body;
 
       // Alternatively, extract currentUserId from authenticated request context:

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, ArrowRight } from "lucide-react";
-import { messengerStore } from "../../../messangerStore/messengerStore";
 import { User } from "../../../types/types";
 import { authApi } from "../../../api/auth.api";
 

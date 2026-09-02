@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { Request, Response, CookieOptions } from "express";
 import { AuthService } from "./auth.services.js";
 
 // const ACCESS_COOKIE_NAME = "__Host-access_token";
@@ -9,15 +9,7 @@ const isProduction = process.env.NODE_ENV === "production";
 const ACCESS_COOKIE_NAME = "access_token";
 const REFRESH_COOKIE_NAME = "refresh_token";
 
-export interface RefreshAuthenticatedRequest extends Request {
-  auth: {
-    userId: string;
-    sessionId: string;
-    remainingTTL: number;
-  };
-}
-
-const cookieOptions = {
+const cookieOptions: CookieOptions = {
   httpOnly: true,
   secure: false,
   sameSite: "lax",
@@ -101,15 +93,13 @@ export class AuthController {
   }
 
   static async refresh(req: Request, res: Response): Promise<void> {
-    console.log("called here");
-
-    const authReq = req as RefreshAuthenticatedRequest;
+    const { userId, sessionId, remainingTTL } = req.refreshAuth!;
 
     try {
       const tokens = await AuthService.refreshAccessToken(
-        authReq.auth.userId,
-        authReq.auth.sessionId,
-        authReq.auth.remainingTTL,
+        userId,
+        sessionId,
+        remainingTTL,
       );
 
       res.cookie(ACCESS_COOKIE_NAME, tokens.accessToken, {
@@ -119,7 +109,7 @@ export class AuthController {
 
       res.cookie(REFRESH_COOKIE_NAME, tokens.refreshToken, {
         ...cookieOptions,
-        maxAge: authReq.auth.remainingTTL * 1000,
+        maxAge: remainingTTL * 1000,
       });
 
       res.status(200).json({

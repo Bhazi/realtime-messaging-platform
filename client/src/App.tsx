@@ -1,18 +1,46 @@
-import { MessengerLayout } from "./features/chat/MessengerLayout";
-import { LoginForm } from "./features/auth/components/LoginForm";
 import React, { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthLayout } from "./features/auth/AuthLayout";
+
+import { MessengerLayout } from "./features/chat/MessengerLayout";
+import MessengerLayoutSkeleton from "./features/chat/messengerLayoutSkeleton";
+
+import { LoginForm } from "./features/auth/components/LoginForm";
 import { SignUpForm } from "./features/auth/components/SignUpForm";
+import { AuthLayout } from "./features/auth/AuthLayout";
+
 import { User } from "./types/types";
 import { socket } from "./lib/socket";
 import { userApi } from "./api/user.api";
-import MessengerLayoutSkeleton from "./features/chat/messengerLayoutSkeleton";
 import { authApi } from "./api/auth.api";
+
 import "./index.css";
+
+function ProtectedRoute({
+  currentUser,
+  isLoadingUser,
+  children,
+}: {
+  currentUser: User | null;
+  isLoadingUser: boolean;
+  children: React.ReactNode;
+}) {
+  if (isLoadingUser) {
+    return <MessengerLayoutSkeleton />;
+  }
+
+  // User is not authenticated.
+  if (!currentUser) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // User is authenticated.
+  return <>{children}</>;
+}
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  // This is initially true while /me is being checked.
   const [isLoadingUser, setIsLoadingUser] = useState(true);
 
   useEffect(() => {
@@ -32,6 +60,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // Don't connect if there is no authenticated user.
+    if (!currentUser) {
+      return;
+    }
+
     socket.connect();
 
     const handleConnect = () => {
@@ -51,8 +84,11 @@ export default function App() {
 
       socket.disconnect();
     };
-  }, []);
+  }, [currentUser]);
 
+  /**
+   * Called after successful login/signup.
+   */
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
   };
@@ -67,22 +103,22 @@ export default function App() {
     }
   };
 
-  // Wait for the /me API call before rendering the router.
-  // This prevents currentUser === null from causing
-  // an unwanted redirect to /login during the initial load.
-
-  if (isLoadingUser) {
-    return <MessengerLayoutSkeleton />;
-  }
-
   return (
     <BrowserRouter>
       <Routes>
-        {/* Redirect Root */}
+        {/* =====================================================
+            ROOT
+            ===================================================== */}
+
         <Route
           path="/"
           element={
-            currentUser ? (
+            isLoadingUser ? (
+              // Optional: generic loading instead of Messenger skeleton.
+              <div className="flex min-h-screen items-center justify-center">
+                <div className="animate-pulse text-gray-500">Loading...</div>
+              </div>
+            ) : currentUser ? (
               <Navigate to="/app" replace />
             ) : (
               <Navigate to="/login" replace />
@@ -90,7 +126,10 @@ export default function App() {
           }
         />
 
-        {/* Login Page */}
+        {/* =====================================================
+            LOGIN
+            ===================================================== */}
+
         <Route
           path="/login"
           element={
@@ -103,7 +142,10 @@ export default function App() {
           }
         />
 
-        {/* Signup Page */}
+        {/* =====================================================
+            SIGN UP
+            ===================================================== */}
+
         <Route
           path="/signup"
           element={
@@ -116,53 +158,70 @@ export default function App() {
           }
         />
 
-        {/* Main Messenger Routes */}
+        {/* =====================================================
+            MESSENGER HOME
+            ===================================================== */}
+
         <Route
           path="/app"
           element={
-            currentUser ? (
+            <ProtectedRoute
+              currentUser={currentUser}
+              isLoadingUser={isLoadingUser}
+            >
               <MessengerLayout
-                currentUser={currentUser}
+                currentUser={currentUser!}
                 onLogout={handleLogout}
                 onCurrentUserChange={setCurrentUser}
               />
-            ) : (
-              <Navigate to="/login" replace />
-            )
+            </ProtectedRoute>
           }
         />
+
+        {/* =====================================================
+            MESSENGER CHAT
+            ===================================================== */}
 
         <Route
           path="/app/chat/:conversationId"
           element={
-            currentUser ? (
+            <ProtectedRoute
+              currentUser={currentUser}
+              isLoadingUser={isLoadingUser}
+            >
               <MessengerLayout
-                currentUser={currentUser}
+                currentUser={currentUser!}
                 onLogout={handleLogout}
                 onCurrentUserChange={setCurrentUser}
               />
-            ) : (
-              <Navigate to="/login" replace />
-            )
+            </ProtectedRoute>
           }
         />
+
+        {/* =====================================================
+            SETTINGS
+            ===================================================== */}
 
         <Route
           path="/app/settings"
           element={
-            currentUser ? (
+            <ProtectedRoute
+              currentUser={currentUser}
+              isLoadingUser={isLoadingUser}
+            >
               <MessengerLayout
-                currentUser={currentUser}
+                currentUser={currentUser!}
                 onLogout={handleLogout}
                 onCurrentUserChange={setCurrentUser}
               />
-            ) : (
-              <Navigate to="/login" replace />
-            )
+            </ProtectedRoute>
           }
         />
 
-        {/* Catch-all Fallback */}
+        {/* =====================================================
+            CATCH ALL
+            ===================================================== */}
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

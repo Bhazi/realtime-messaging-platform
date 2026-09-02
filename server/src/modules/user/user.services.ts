@@ -63,6 +63,17 @@ export class UserService {
     return await UserModel.deleteGroupConversation(conversationId, userId);
   }
 
+  static async deleteDirectConversation(
+    conversationId: string,
+    userId: string,
+  ) {
+    if (!conversationId || !userId) {
+      throw new Error("conversationId and userId are required.");
+    }
+
+    return await UserModel.deleteDirectConversation(conversationId, userId);
+  }
+
   static async addUserToGroup(
     conversationId: string,
     currentUserId: string,

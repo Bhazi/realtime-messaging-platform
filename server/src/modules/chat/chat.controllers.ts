@@ -191,7 +191,7 @@ export class ChatController {
 
   static async getMessages(req: Request, res: Response): Promise<void> {
     try {
-      const { conversationId } = req.params;
+      const { conversationId } = req.params as { conversationId: string };
 
       const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
 
@@ -247,7 +247,7 @@ export class ChatController {
 
   static async deleteMessage(req: Request, res: Response): Promise<void> {
     try {
-      const { messageId } = req.params;
+      const { messageId } = req.params as { messageId: string };
       const { userId } = req.body;
 
       if (!userId) {

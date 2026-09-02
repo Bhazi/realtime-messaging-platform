@@ -26,7 +26,7 @@ export class ChatService {
 
     if (existingConv) {
       // Unhide if hidden for the current user
-      await ChatModel.unhideForUser(existingConv.id, currentUserId);
+      await ChatModel.unhideAndUnleftForUser(existingConv.id, currentUserId);
 
       // Fetch fresh member state (includes nested user details)
       const members = await ChatModel.getMembersByConversationId(

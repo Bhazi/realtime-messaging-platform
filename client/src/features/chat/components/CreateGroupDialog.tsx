@@ -1,7 +1,6 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { FolderPlus, X, Plus, Trash2, Users } from "lucide-react";
-import { messengerStore } from "../../../messangerStore/messengerStore";
 import { User, Conversation } from "../../../types/types";
 
 import { userApi } from "../../../api/user.api";
@@ -14,6 +13,11 @@ interface CreateGroupDialogProps {
   currentUserId: string;
 }
 
+type AddedUser = {
+  name: string;
+  uid: string;
+};
+
 export const CreateGroupDialog: React.FC<CreateGroupDialogProps> = ({
   isOpen,
   onClose,
@@ -22,7 +26,7 @@ export const CreateGroupDialog: React.FC<CreateGroupDialogProps> = ({
 }) => {
   const [groupName, setGroupName] = useState("");
   const [memberUidInput, setMemberUidInput] = useState("");
-  const [addedUids, setAddedUids] = useState<string[]>([]);
+  const [addedUids, setAddedUids] = useState<AddedUser[]>([]);
   const [errorMsg, setErrorMsg] = useState("");
 
   // Add Image for Profile Picture
@@ -47,17 +51,23 @@ export const CreateGroupDialog: React.FC<CreateGroupDialogProps> = ({
       return;
     }
 
-    if (addedUids.includes(cleanUid)) {
+    if (addedUids.some((member) => member.uid === cleanUid)) {
       setErrorMsg("User UID already added to list.");
       return;
     }
 
-    setAddedUids([...addedUids, cleanUid]);
+    const userObject = {
+      name: user.username,
+      uid: cleanUid,
+    };
+
+    setAddedUids((current) => [...current, userObject]);
+
     setMemberUidInput("");
   };
 
   const handleRemoveUid = (uid: string) => {
-    setAddedUids(addedUids.filter((u) => u !== uid));
+    setAddedUids(addedUids.filter((user) => user.uid !== uid));
   };
 
   // Select image
@@ -84,13 +94,15 @@ export const CreateGroupDialog: React.FC<CreateGroupDialogProps> = ({
       return;
     }
 
+    const uids = addedUids.map((user) => user.uid);
+
     const formData = new FormData();
 
     formData.append("userId", currentUserId);
     formData.append("groupName", groupName);
 
     // Convert array to JSON string
-    formData.append("addedUids", JSON.stringify(addedUids));
+    formData.append("addedUids", JSON.stringify(uids));
 
     if (selectedImage) {
       formData.append("groupImage", selectedImage);
@@ -118,25 +130,29 @@ export const CreateGroupDialog: React.FC<CreateGroupDialogProps> = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+          onClick={handleClose}
+        >
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 12 }}
+            onClick={(e) => e.stopPropagation()}
             className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-6 shadow-2xl relative space-y-5"
           >
             <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center">
+                <div className="w-11 h-9 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center">
                   <FolderPlus size={18} />
                 </div>
-                <h3 className="text-lg font-semibold text-white">
+                <h3 className="p-1.2 text-lg font-semibold text-white">
                   Create Group
                 </h3>
               </div>
               <button
-                onClick={handleClose}
                 className="p-1.5 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                onClick={handleClose}
               >
                 <X size={18} />
               </button>
@@ -235,20 +251,22 @@ export const CreateGroupDialog: React.FC<CreateGroupDialogProps> = ({
                     Selected Members ( {addedUids.length} ) :
                   </span>
                   <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2 bg-zinc-950/60 rounded-xl border border-zinc-800">
-                    {addedUids.map((uid) => {
-                      const user = messengerStore.getUserByUid(uid);
+                    {addedUids.map((user) => {
                       return (
                         <div
-                          key={uid}
+                          key={user.uid}
                           className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-200"
                         >
-                          <span className="font-medium">{uid}</span>
+                          <span className="font-medium">
+                            {user.name[0].toUpperCase() +
+                              user.name.substring(1).toLowerCase()}
+                          </span>
                           <span className="text-[10px] text-zinc-400 font-mono">
-                            ({uid})
+                            ({user.uid})
                           </span>
                           <button
                             type="button"
-                            onClick={() => handleRemoveUid(uid)}
+                            onClick={() => handleRemoveUid(user.uid)}
                             className="text-zinc-400 hover:text-rose-400 p-0.5 ml-1"
                           >
                             <X size={12} />

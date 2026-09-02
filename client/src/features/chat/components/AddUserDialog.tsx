@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Search, UserPlus, X, Check, Shield } from "lucide-react";
-import { messengerStore } from "../../../messangerStore/messengerStore";
 import { User } from "../../../types/types";
 
 import { userApi } from "../../../api/user.api";
@@ -75,19 +74,23 @@ export const AddUserDialog: React.FC<AddUserDialogProps> = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+          onClick={handleClose}
+        >
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 12 }}
+            onClick={(e) => e.stopPropagation()}
             className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-6 shadow-2xl relative space-y-5"
           >
             <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center">
+                <div className="w-12 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center">
                   <UserPlus size={18} />
                 </div>
-                <h3 className="text-lg font-semibold text-white">
+                <h3 className="p-1.2 text-lg font-semibold text-white">
                   Add Personal User
                 </h3>
               </div>

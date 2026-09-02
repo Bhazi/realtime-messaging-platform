@@ -17,6 +17,13 @@ router.delete(
   UserController.deleteGroupConversation,
 );
 
+// Delete / Dissolve Group Route
+router.delete(
+  "/direct/:conversationId",
+  authMiddleware,
+  UserController.deleteDirectConversation,
+);
+
 router.get("/", authMiddleware, UserController.getUsers);
 
 // GET user by primary key ID: /api/v1/user/id/123e4567-e89b-12d3-a456-426614174000

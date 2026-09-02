@@ -1,16 +1,9 @@
-import type { Request, Response, NextFunction } from "express";
+import type { Request, Response, NextFunction, RequestHandler } from "express";
 import jwt from "jsonwebtoken";
 
 import { TokenService } from "../modules/auth/token.services.js";
 
 const ACCESS_COOKIE_NAME = "access_token";
-
-export interface AuthenticatedRequest extends Request {
-  auth: {
-    userId: string;
-    publicUid: string;
-  };
-}
 
 export function authMiddleware(
   req: Request,
@@ -29,7 +22,7 @@ export function authMiddleware(
   try {
     const decoded = TokenService.verifyAccessToken(accessToken);
 
-    (req as AuthenticatedRequest).auth = {
+    req.auth = {
       userId: decoded.sub,
       publicUid: decoded.publicUid,
     };
