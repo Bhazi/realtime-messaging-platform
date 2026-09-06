@@ -1,6 +1,9 @@
 import React, { useState } from "react";
+
 import { motion, AnimatePresence } from "motion/react";
+
 import { Shield, ShieldAlert, UserMinus, Plus, X } from "lucide-react";
+
 import { Conversation, MemberRole, User } from "../../../types/types";
 
 import { userApi } from "../../../api/user.api";

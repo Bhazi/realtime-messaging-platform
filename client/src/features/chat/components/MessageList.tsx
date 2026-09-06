@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
-
 import { motion } from "motion/react";
 
 import { FileText, Download, Trash2, Eye, Play } from "lucide-react";
@@ -10,23 +9,17 @@ import { MediaViewerModal } from "./MediaViewerModal";
 
 interface MessageListProps {
   messages: Message[];
-
   currentUserId: string;
-
   onDeleteMessage: (messageId: string) => void;
-
   canManageMessages: boolean;
-
   conversationId: string;
-
   /*
    * Parent owns pagination.
    */
   onLoadOlderMessages: () => Promise<void>;
-
   hasMoreMessages: boolean;
-
   isLoadingOlderMessages: boolean;
+  conversationType: string;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
@@ -35,16 +28,10 @@ export const MessageList: React.FC<MessageListProps> = ({
   onDeleteMessage,
   canManageMessages,
   conversationId,
-
-  /*
-   * IMPORTANT:
-   *
-   * Your previous code was missing these three
-   * values in the destructuring.
-   */
   onLoadOlderMessages,
   hasMoreMessages,
   isLoadingOlderMessages,
+  conversationType,
 }) => {
   const [activeViewer, setActiveViewer] = useState<{
     attachment: MessageAttachment;
@@ -52,32 +39,26 @@ export const MessageList: React.FC<MessageListProps> = ({
   } | null>(null);
 
   const [visibleDate, setVisibleDate] = useState<string | null>(null);
-
   /*
    * Main scroll container.
    */
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-
   /*
    * Bottom anchor.
    */
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-
   /*
    * Detect first render / conversation switch.
    */
   const isInitialLoad = useRef(true);
-
   /*
    * Used for detecting newly appended messages.
    */
   const previousMessageCount = useRef(0);
-
   /*
    * Prevent multiple top-scroll requests.
    */
   const loadingOlderRef = useRef(false);
-
   /*
    * Stores scroll position before older messages
    * are inserted.
@@ -99,27 +80,21 @@ export const MessageList: React.FC<MessageListProps> = ({
   const previousScrollHeight = useRef<number | null>(null);
 
   const previousScrollTop = useRef<number | null>(null);
-
   /*
    * Tells us that the next messages update is
    * specifically caused by loading older messages.
    */
   const loadingOlderMessagesRef = useRef(false);
-
   /*
    * Reset state when conversation changes.
    */
+
   useEffect(() => {
     isInitialLoad.current = true;
-
     previousMessageCount.current = 0;
-
     previousScrollHeight.current = null;
-
     previousScrollTop.current = null;
-
     loadingOlderMessagesRef.current = false;
-
     loadingOlderRef.current = false;
   }, [conversationId]);
 
@@ -152,7 +127,6 @@ export const MessageList: React.FC<MessageListProps> = ({
       });
 
       previousMessageCount.current = messages.length;
-
       isInitialLoad.current = false;
 
       return;
@@ -206,12 +180,10 @@ export const MessageList: React.FC<MessageListProps> = ({
     }
 
     const oldScrollHeight = previousScrollHeight.current;
-
     const oldScrollTop = previousScrollTop.current;
 
     if (oldScrollHeight !== null && oldScrollTop !== null) {
       const newScrollHeight = container.scrollHeight;
-
       const heightDifference = newScrollHeight - oldScrollHeight;
 
       container.scrollTop = oldScrollTop + heightDifference;
@@ -221,11 +193,8 @@ export const MessageList: React.FC<MessageListProps> = ({
      * Reset.
      */
     previousScrollHeight.current = null;
-
     previousScrollTop.current = null;
-
     loadingOlderMessagesRef.current = false;
-
     loadingOlderRef.current = false;
 
     /*
@@ -258,7 +227,6 @@ export const MessageList: React.FC<MessageListProps> = ({
      * loading older messages.
      */
     previousScrollHeight.current = container.scrollHeight;
-
     previousScrollTop.current = container.scrollTop;
 
     /*
@@ -266,7 +234,6 @@ export const MessageList: React.FC<MessageListProps> = ({
      * pagination, not a new message.
      */
     loadingOlderMessagesRef.current = true;
-
     loadingOlderRef.current = true;
 
     try {
@@ -278,11 +245,8 @@ export const MessageList: React.FC<MessageListProps> = ({
        * Reset if the request failed.
        */
       loadingOlderMessagesRef.current = false;
-
       loadingOlderRef.current = false;
-
       previousScrollHeight.current = null;
-
       previousScrollTop.current = null;
     }
   };
@@ -387,8 +351,6 @@ export const MessageList: React.FC<MessageListProps> = ({
 
   const formatMessageDate = (isoString: string) => {
     const date = new Date(isoString);
-
-    console.log(date.toLocaleDateString("en-UK"));
 
     return date.toLocaleDateString("en-UK");
   };
@@ -546,15 +508,22 @@ export const MessageList: React.FC<MessageListProps> = ({
               >
                 {/* Message header */}
                 <div
-                  className={`flex items-center gap-2 text-[11px] text-zinc-400 ${
-                    isSelf ? "justify-end" : "justify-start"
-                  }`}
+                  className={`flex items-center
+                    ${conversationType === "GROUP" ? "gap-2" : ""}  text-[11px] text-zinc-400 ${
+                      isSelf ? "justify-end" : "justify-start"
+                    }`}
                 >
                   <span className="font-semibold text-zinc-300">
-                    {isSelf ? "" : msg.sender?.displayName || "User"}
+                    {isSelf
+                      ? ""
+                      : conversationType === "GROUP"
+                        ? msg.sender?.displayName
+                        : ""}
                   </span>
 
-                  <span>{isSelf ? "" : "•"}</span>
+                  <span>
+                    {isSelf ? "" : conversationType === "GROUP" ? "•" : ""}
+                  </span>
 
                   <span>{formatTime(msg.createdAt)}</span>
                 </div>

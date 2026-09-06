@@ -59,6 +59,20 @@ export default function App() {
     loadUser();
   }, []);
 
+  const HEARTBEAT_INTERVAL = 30_000;
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const heartbeatInterval = setInterval(() => {
+      socket.emit("presence:heartbeat");
+    }, HEARTBEAT_INTERVAL);
+
+    return () => {
+      clearInterval(heartbeatInterval);
+    };
+  }, [socket]);
+
   useEffect(() => {
     // Don't connect if there is no authenticated user.
     if (!currentUser) {

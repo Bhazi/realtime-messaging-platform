@@ -1,19 +1,21 @@
 import React, { useState, useRef } from "react";
+
 import { useNavigate } from "react-router-dom";
+
 import { motion, AnimatePresence } from "motion/react";
+
 import {
   Copy,
   Check,
   LogOut,
   Trash2,
   ArrowLeft,
-  Shield,
   User as UserIcon,
   Lock,
-  Key,
   Camera,
   X,
 } from "lucide-react";
+
 import { User } from "../../../types/types";
 
 import { userApi } from "../../../api/user.api";

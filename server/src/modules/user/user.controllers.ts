@@ -1,5 +1,6 @@
 // server/src/controllers/user.controller.ts
 import { Request, Response } from "express";
+
 import { UserService } from "./user.services.js";
 
 export class UserController {

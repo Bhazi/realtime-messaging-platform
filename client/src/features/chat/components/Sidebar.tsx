@@ -115,6 +115,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   const isActive = chat.id === activeConversationId;
                   return (
                     <motion.div
+                      key={chat.id}
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{
@@ -124,7 +125,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       }}
                     >
                       <button
-                        key={chat.id}
                         onClick={() => onSelectConversation(chat.id)}
                         className={`w-full p-2.5 rounded-2xl flex items-center gap-3 transition-all cursor-pointer ${
                           isActive
@@ -195,6 +195,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   const isActive = chat.id === activeConversationId;
                   return (
                     <motion.div
+                      key={chat.id}
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{
@@ -204,7 +205,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       }}
                     >
                       <button
-                        key={chat.id}
                         onClick={() => onSelectConversation(chat.id)}
                         className={`w-full p-2.5 rounded-2xl flex items-center gap-3 transition-all cursor-pointer ${
                           isActive
@@ -219,9 +219,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-semibold truncate text-white">
                               {chat.name}
-                            </span>
-                            <span className="text-[10px] text-zinc-500">
-                              {chat.members.length}m
                             </span>
                           </div>
                           <p className="text-[11px] text-zinc-500 truncate">

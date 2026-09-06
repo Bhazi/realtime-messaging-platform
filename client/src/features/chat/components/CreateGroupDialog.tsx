@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
+
 import { FolderPlus, X, Plus, Trash2, Users } from "lucide-react";
+
 import { User, Conversation } from "../../../types/types";
 
 import { userApi } from "../../../api/user.api";

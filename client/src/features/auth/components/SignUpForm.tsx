@@ -44,7 +44,9 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSignUpSuccess }) => {
       const data = await authApi.signup({
         username: username.trim().toLowerCase(),
         email: email.trim().toLowerCase(),
-        displayName: displayName.trim(),
+        displayName:
+          displayName.trim().charAt(0).toUpperCase() +
+          displayName.trim().slice(1).toLocaleLowerCase(),
         password,
       });
 

@@ -26,23 +26,25 @@ import { chatApi } from "../../../api/chat.api";
 
 import { RemoveChatModal } from "./RemoveChat";
 
+import { presenceApi } from "../../../api/presence.api";
+
 interface ChatAreaProps {
   conversation: Conversation;
   currentUser: User;
   onRefresh: () => void;
 }
 
+type Presence = {
+  userId: string;
+  online: boolean;
+  lastSeenAt: string | null;
+};
+
 export const ChatArea: React.FC<ChatAreaProps> = ({
   conversation,
   currentUser,
   onRefresh,
 }) => {
-  /*
-   * =====================================================
-   * STATE
-   * =====================================================
-   */
-
   const [textMessage, setTextMessage] = useState("");
 
   const [isRemoveModalOpen, setIsRemoveModalOpen] = useState(false);
@@ -55,9 +57,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
 
-  /*
-   * Messages currently displayed.
-   */
   const [messages, setMessages] = useState<Message[]>([]);
 
   const messageInputRef = useRef<HTMLInputElement | null>(null);
@@ -76,6 +75,134 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
    * Loading state.
    */
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+
+  const [participantPresence, setParticipantPresence] = useState<Presence>();
+  const [onlineParticipantIds, setOnlineParticipantIds] = useState<Set<string>>(
+    new Set(),
+  );
+
+  /*
+   * =====================================================
+   * ISONLINE
+   * =====================================================
+   */
+
+  useEffect(() => {
+    const fetchParticipantPresence = async () => {
+      try {
+        const participantIds = conversation.members
+          .filter(({ userId }) => userId !== currentUser.id)
+          .map(({ userId }) => userId);
+
+        // Direct conversation: check the other participant's presence
+        if (conversation.type === "DIRECT") {
+          const participantId = participantIds[0];
+
+          if (!participantId) {
+            setParticipantPresence(undefined);
+            return;
+          }
+
+          const presence = await presenceApi.isParticipantOnline(participantId);
+
+          setParticipantPresence(presence);
+          return;
+        }
+
+        // Group conversation: count online participants
+        if (participantIds.length === 0) {
+          setOnlineParticipantIds(new Set());
+          return;
+        }
+
+        const onlineIds =
+          await presenceApi.onlineParticipantsIds(participantIds);
+
+        setOnlineParticipantIds(new Set(onlineIds));
+      } catch (error) {
+        console.error("Failed to fetch participant presence:", error);
+      }
+    };
+
+    fetchParticipantPresence();
+  }, [conversation.members, conversation.type]);
+
+  {
+    /* TESTING -------------------------------------------------------------------------------*/
+  }
+  function formatLastSeen(date: string): string {
+    const lastSeenDate = new Date(date);
+    const now = new Date();
+
+    const differenceInMs = now.getTime() - lastSeenDate.getTime();
+    const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
+
+    // Within the last 7 days
+    if (differenceInMs >= 0 && differenceInMs < sevenDaysInMs) {
+      return (
+        lastSeenDate.toLocaleDateString("en-US", {
+          weekday: "short",
+        }) +
+        " " +
+        lastSeenDate.toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        })
+      );
+    }
+
+    // Older than 7 days
+    return lastSeenDate.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }
+
+  useEffect(() => {
+    const handlePresenceUpdate = (data: {
+      userId: string;
+      online: boolean;
+      lastSeenAt: string | null;
+    }) => {
+      console.log(
+        "called the handlePresenceUpdate when user did some of this online/offline",
+      );
+
+      // Is this user a member of the current conversation?
+      const isMember = conversation.members.some(
+        ({ userId }) => userId === data.userId,
+      );
+
+      if (!isMember) {
+        return;
+      }
+
+      // Only relevant for group conversations
+      if (conversation.type !== "GROUP") {
+        setParticipantPresence(data);
+      }
+
+      setOnlineParticipantIds((previous) => {
+        const next = new Set(previous);
+
+        if (data.online) {
+          next.add(data.userId);
+        } else {
+          next.delete(data.userId);
+        }
+
+        return next;
+      });
+    };
+
+    socket.on("presence:update", handlePresenceUpdate);
+
+    return () => {
+      socket.off("presence:update", handlePresenceUpdate);
+    };
+  }, [conversation.type, conversation.members]);
 
   /*
    * =====================================================
@@ -443,7 +570,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       {/* ================================================= */}
       {/* HEADER */}
       {/* ================================================= */}
-
       <motion.div
         className="px-6 py-4 bg-zinc-950/90 border-b border-zinc-800/80 flex items-center justify-between z-10 backdrop-blur-md"
         initial={{
@@ -469,15 +595,21 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-sm sm:text-base font-bold text-white">
-                {conversation.name}
+                {conversation.name!.charAt(0).toUpperCase() +
+                  conversation.name!.slice(1).toLowerCase()}
               </h2>
             </div>
 
-            <p className="text-xs text-zinc-400">
-              {conversation.type === "GROUP"
-                ? `${conversation.members.length} members`
-                : "Direct Chat & File Sharing"}
-            </p>
+            {/*Online presence section*/}
+            {conversation.type == "DIRECT" ? (
+              <p className="text-xs text-zinc-400">
+                {participantPresence?.online
+                  ? "online"
+                  : `Last seen ${formatLastSeen(participantPresence?.lastSeenAt!)}`}
+              </p>
+            ) : (
+              <p className="text-xs text-zinc-400">{`${onlineParticipantIds.size} online`}</p>
+            )}
           </div>
         </div>
 
@@ -504,11 +636,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </button>
         </div>
       </motion.div>
-
       {/* ================================================= */}
       {/* MESSAGE LIST */}
       {/* ================================================= */}
-
       <MessageList
         messages={messages}
         currentUserId={currentUser.id}
@@ -518,12 +648,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         onLoadOlderMessages={loadOlderMessages}
         hasMoreMessages={hasMoreMessages}
         isLoadingOlderMessages={isLoadingMessages}
+        conversationType={conversation.type}
       />
-
       {/* ================================================= */}
       {/* MESSAGE INPUT */}
       {/* ================================================= */}
-
       <motion.div
         className="p-3 sm:p-4 bg-zinc-950/90 border-t border-zinc-800/80 z-10 backdrop-blur-md"
         initial={{
@@ -669,22 +798,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </motion.button>
         </form>
       </motion.div>
-
       {/* ================================================= */}
       {/* FILE UPLOAD MODAL */}
       {/* ================================================= */}
-
       <FileUploadModal
         isOpen={!!uploadModalType}
         onClose={() => setUploadModalType(null)}
         defaultType={uploadModalType || "FILE"}
         onSendFile={handleSendFile}
       />
-
       {/* ================================================= */}
       {/* GROUP MEMBERS */}
       {/* ================================================= */}
-
       {conversation.type === "GROUP" && (
         <GroupMembersModal
           isOpen={isMembersModalOpen}
@@ -694,11 +819,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           onGroupUpdated={onRefresh}
         />
       )}
-
       {/* ================================================= */}
       {/* Remove chat Model */}
       {/* ================================================= */}
-
       {
         <RemoveChatModal
           isOpen={isRemoveModalOpen}

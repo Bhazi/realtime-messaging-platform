@@ -782,4 +782,56 @@ export class UserModel {
       client.release();
     }
   }
+
+  static async setLastSeen(userId: string): Promise<void> {
+    await pool.query(
+      `
+      UPDATE users
+      SET last_seen_at = NOW()
+      WHERE id = $1
+    `,
+      [userId],
+    );
+  }
+
+  static async getLastSeen(userId: string): Promise<void> {
+    const query = `
+      SELECT last_seen_at
+      FROM users
+      WHERE id = $1
+    `;
+
+    const { rows } = await pool.query(query, [userId]);
+
+    return rows[0].last_seen_at;
+  }
+
+  static async isMember(
+    conversation_id: string,
+    user_id: string,
+  ): Promise<boolean> {
+    const query = `
+    SELECT 1
+    FROM conversation_members
+    WHERE conversation_id = $1
+      AND user_id = $2
+    LIMIT 1;
+  `;
+
+    const { rows } = await pool.query(query, [conversation_id, user_id]);
+
+    return rows.length > 0;
+  }
+
+  static async getConversationIdsForUser(user_id: string): Promise<string[]> {
+    const query = `
+    SELECT conversation_id
+    FROM conversation_members
+    WHERE user_id = $1
+  `;
+
+    const { rows } = await pool.query(query, [user_id]);
+
+    return rows.map((row) => row.conversation_id);
+  }
 }

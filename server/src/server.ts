@@ -10,6 +10,7 @@ import { Server } from "socket.io";
 import authRoutes from "./modules/auth/auth.routes.js";
 import userRoutes from "./modules/user/user.routes.js";
 import chatRoutes from "./modules/chat/chat.routes.js";
+import presenceRoutes from "./modules/presence/presence.routes.js";
 
 import { connectDB } from "./config/db.js";
 
@@ -18,6 +19,10 @@ import { connectRedis } from "./config/redis.js";
 import { initializeChatSocket } from "./modules/chat/chat.socket.js";
 
 import cookieParser from "cookie-parser";
+
+import jwt, { type JwtPayload } from "jsonwebtoken";
+
+import * as cookie from "cookie";
 
 const FRONTEND_URL = "http://localhost:5173";
 
@@ -69,6 +74,7 @@ app.use("/api/v1/users", userRoutes);
 
 app.use("/api/v1/chat", chatRoutes);
 
+app.use("/api/v1/presence", presenceRoutes);
 /*
  * =====================================================
  * MORGAN
@@ -137,6 +143,53 @@ const io = new Server(httpServer, {
   },
 
   transports: ["websocket"],
+});
+
+declare module "socket.io" {
+  interface Socket {
+    user: {
+      sub: string;
+      publicUid: string;
+      type: string;
+      iat: number;
+      exp: number;
+    };
+  }
+}
+
+interface AuthPayload {
+  sub: string;
+  publicUid: string;
+  type: string;
+  iat: number;
+  exp: number;
+}
+
+io.use((socket, next) => {
+  try {
+    const rawCookie = socket.handshake.headers.cookie;
+
+    if (!rawCookie) {
+      return next(new Error("No cookies found"));
+    }
+
+    const cookies = cookie.parseCookie(rawCookie);
+
+    const token = cookies.access_token;
+
+    if (!token) {
+      return next(new Error("No access token"));
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!);
+
+    socket.user = decoded as AuthPayload;
+
+    next();
+  } catch (error) {
+    console.error("Socket authentication error:", error);
+    next(new Error("Unauthorized"));
+  }
 });
 
 /*

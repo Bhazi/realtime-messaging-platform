@@ -25,7 +25,6 @@ interface FileUploadModalProps {
 export const FileUploadModal: React.FC<FileUploadModalProps> = ({
   isOpen,
   onClose,
-  defaultType,
   onSendFile,
 }) => {
   const [selectedType, setSelectedType] = useState<MessageType>("PHOTO");
