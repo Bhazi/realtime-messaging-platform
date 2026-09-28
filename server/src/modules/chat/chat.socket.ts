@@ -5,7 +5,7 @@ import { UserModel } from "../../models/user.model.js";
 
 let io: Server | null = null;
 
-export function initializeChatSocket(socketServer: Server) {
+export function initializeChatSocket(socketServer: Server, serverId: string) {
   io = socketServer;
 
   io.on("connection", async (socket: Socket) => {
@@ -15,7 +15,7 @@ export function initializeChatSocket(socketServer: Server) {
     try {
       const wasOnline = await PresenceCache.isOnline(userId);
 
-      await PresenceCache.setOnline(userId, socket.id, "A");
+      await PresenceCache.setOnline(userId, socket.id, serverId);
 
       if (!wasOnline) {
         const conversationIds =
@@ -42,7 +42,7 @@ export function initializeChatSocket(socketServer: Server) {
         const isAlive = await PresenceCache.heartbeat(userId, socket.id);
 
         if (!isAlive) {
-          await PresenceCache.setOnline(userId, socket.id, "A");
+          await PresenceCache.setOnline(userId, socket.id, serverId);
         }
       } catch (error) {
         console.error("Failed to update presence heartbeat:", error);

@@ -134,21 +134,46 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     const lastSeenDate = new Date(date);
     const now = new Date();
 
+    const time = lastSeenDate.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+
+    // Check if the date is today
+    const isToday =
+      lastSeenDate.getFullYear() === now.getFullYear() &&
+      lastSeenDate.getMonth() === now.getMonth() &&
+      lastSeenDate.getDate() === now.getDate();
+
+    if (isToday) {
+      return `Today ${time}`;
+    }
+
+    // Check if the date is yesterday
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+
+    const isYesterday =
+      lastSeenDate.getFullYear() === yesterday.getFullYear() &&
+      lastSeenDate.getMonth() === yesterday.getMonth() &&
+      lastSeenDate.getDate() === yesterday.getDate();
+
+    if (isYesterday) {
+      return `Yesterday ${time}`;
+    }
+
+    // Within the last 7 days
     const differenceInMs = now.getTime() - lastSeenDate.getTime();
     const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
 
-    // Within the last 7 days
     if (differenceInMs >= 0 && differenceInMs < sevenDaysInMs) {
       return (
         lastSeenDate.toLocaleDateString("en-US", {
           weekday: "short",
         }) +
         " " +
-        lastSeenDate.toLocaleTimeString("en-US", {
-          hour: "numeric",
-          minute: "2-digit",
-          hour12: true,
-        })
+        time
       );
     }
 

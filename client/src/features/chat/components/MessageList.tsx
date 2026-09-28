@@ -366,8 +366,6 @@ export const MessageList: React.FC<MessageListProps> = ({
   const formatTime = (isoString: string) => {
     const d = new Date(isoString);
 
-    // setDate(d.toLocaleDateString());
-
     return d.toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
