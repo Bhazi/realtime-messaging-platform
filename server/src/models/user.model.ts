@@ -823,15 +823,68 @@ export class UserModel {
     return rows.length > 0;
   }
 
-  static async getConversationIdsForUser(user_id: string): Promise<string[]> {
+  static async getConversationIdsForUser(userId: string): Promise<string[]> {
     const query = `
     SELECT conversation_id
     FROM conversation_members
     WHERE user_id = $1
   `;
 
-    const { rows } = await pool.query(query, [user_id]);
+    const { rows } = await pool.query(query, [userId]);
 
     return rows.map((row) => row.conversation_id);
+  }
+
+  static async setLastReadSeq(
+    conversationId: string,
+    seq: number,
+    userId: string,
+  ) {
+    const query = `
+    UPDATE conversation_members
+    SET last_read_seq = GREATEST(last_read_seq, $1)
+    WHERE user_id = $2
+      AND conversation_id = $3
+      AND left_at IS NULL
+  `;
+
+    await pool.query(query, [seq, userId, conversationId]);
+  }
+
+  static async setLastSeenForChat(conversationId: string, userId: string) {
+    const query = `
+    UPDATE conversation_members
+    SET last_seen_at = NOW()
+    WHERE user_id = $1
+      AND conversation_id = $2
+      AND left_at IS NULL
+  `;
+
+    await pool.query(query, [userId, conversationId]);
+  }
+
+  static async AllConversationIds(): Promise<string[]> {
+    const query = `
+    SELECT id
+    FROM conversations
+  `;
+
+    const result = await pool.query(query);
+
+    return result.rows.map((conversation) => conversation.id);
+  }
+
+  static async getAllUserIdsInConversation(
+    conversationId: string,
+  ): Promise<string[]> {
+    const query = `
+    SELECT user_id
+    FROM conversation_members
+    WHERE conversation_id = $1
+  `;
+
+    const result = await pool.query(query, [conversationId]);
+
+    return result.rows.map((member) => member.user_id);
   }
 }

@@ -4,6 +4,8 @@ import UserRow from "../../types/types.js";
 
 import { UserCache } from "../user/user.cache.js";
 
+import { PresenceCache } from "../presence/presence.cache.js";
+
 export class UserService {
   static async getAllUsers() {
     return await UserModel.findAll();
@@ -77,23 +79,29 @@ export class UserService {
   static async addUserToGroup(
     conversationId: string,
     currentUserId: string,
-    targetUid: string,
+    targetUserUid: string,
   ) {
     if (!conversationId) {
       throw new Error("conversationId is required.");
     }
+
     if (!currentUserId) {
       throw new Error("currentUserId is required.");
     }
-    if (!targetUid) {
-      throw new Error("targetUid is required.");
+
+    if (!targetUserUid) {
+      throw new Error("targetUserUid is required.");
     }
 
-    return await UserModel.addUserToGroup(
+    const dbResult = await UserModel.addUserToGroup(
       conversationId,
       currentUserId,
-      targetUid,
+      targetUserUid,
     );
+
+    await PresenceCache.addConversationMember(conversationId, targetUserUid);
+
+    return dbResult;
   }
 
   static async updateGroupMemberRole(
@@ -137,11 +145,15 @@ export class UserService {
       throw new Error("Use the leave group endpoint to remove yourself.");
     }
 
-    return await UserModel.removeUserFromGroup(
+    const dbResult = await UserModel.removeUserFromGroup(
       conversationId,
       currentUserId,
       targetUserId,
     );
+
+    await PresenceCache.removeConversationMember(conversationId, targetUserId);
+
+    return dbResult;
   }
 
   static async getUser(userId: string) {

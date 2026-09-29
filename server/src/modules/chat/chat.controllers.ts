@@ -175,7 +175,7 @@ export class ChatController {
       );
 
       // Notify everyone in this conversation
-      emitNewMessage(conversationId, message);
+      emitNewMessage(conversationId, senderId, message);
 
       // Normal REST response to the sender
       res.status(201).json({

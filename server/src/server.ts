@@ -35,7 +35,7 @@ if (cluster.isPrimary) {
 
   console.log(`Primary ${process.pid} starting ${numWorkers} workers`);
 
-  for (let i = 0; i < numWorkers; i++) {
+  for (let i = 0; i < 1; i++) {
     cluster.fork();
   }
 

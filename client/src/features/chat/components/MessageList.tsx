@@ -7,6 +7,8 @@ import { Message, MessageAttachment, MessageType } from "../../../types/types";
 
 import { MediaViewerModal } from "./MediaViewerModal";
 
+import { socket } from "../../../lib/socket";
+
 interface MessageListProps {
   messages: Message[];
   currentUserId: string;
@@ -20,6 +22,7 @@ interface MessageListProps {
   hasMoreMessages: boolean;
   isLoadingOlderMessages: boolean;
   conversationType: string;
+  shouldScrollToBottomRef: string;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
@@ -32,7 +35,14 @@ export const MessageList: React.FC<MessageListProps> = ({
   hasMoreMessages,
   isLoadingOlderMessages,
   conversationType,
+  shouldScrollToBottomRef,
 }) => {
+  // --------------------------------------------------------------
+
+  // const lastReadSeqRef = useRef(0);
+
+  // ------------------------------------------------------------
+
   const [activeViewer, setActiveViewer] = useState<{
     attachment: MessageAttachment;
     type: MessageType;
@@ -148,7 +158,11 @@ export const MessageList: React.FC<MessageListProps> = ({
      *
      * Scroll to bottom.
      */
-    if (messages.length > previousMessageCount.current) {
+
+    if (
+      messages.length > previousMessageCount.current &&
+      shouldScrollToBottomRef.current
+    ) {
       requestAnimationFrame(() => {
         messagesEndRef.current?.scrollIntoView({
           behavior: "smooth",
@@ -401,6 +415,10 @@ export const MessageList: React.FC<MessageListProps> = ({
       },
     },
   };
+
+  // ------------------------------HELPER--------------------------------------------------
+
+  // ------------------------------HELPER--------------------------------------------------
 
   return (
     <motion.div

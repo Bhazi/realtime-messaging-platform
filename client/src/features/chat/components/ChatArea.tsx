@@ -191,10 +191,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       online: boolean;
       lastSeenAt: string | null;
     }) => {
-      console.log(
-        "called the handlePresenceUpdate when user did some of this online/offline",
-      );
-
       // Is this user a member of the current conversation?
       const isMember = conversation.members.some(
         ({ userId }) => userId === data.userId,
@@ -261,6 +257,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
         setMessages(result.messages);
 
+        const lastMessage = result.messages[result.messages.length - 1];
+
+        if (lastMessage) {
+          console.log("called the conversation");
+
+          socket.emit("conversation:read", {
+            conversationId: conversation.id,
+            lastReadSeq: lastMessage.seq,
+            currentUser,
+          });
+        }
+
         setNextCursor(result.nextCursor);
 
         setHasMoreMessages(result.hasMore);
@@ -306,10 +314,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       return;
     }
 
-    /*
-     * Tell backend we want to receive
-     * messages for this conversation.
-     */
     socket.emit("join_conversation", conversation.id);
 
     console.log("Joined conversation:", conversation.id);
@@ -330,12 +334,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
    * =====================================================
    */
 
+  const shouldScrollToBottomRef = useRef(false);
+
   useEffect(() => {
     /*
      * Handle message received from backend.
      */
-    const handleNewMessage = (message: Message) => {
+    const handleNewMessage = ({ message, senderId }) => {
       console.log("New message received:", message);
+
       /*
        * Make sure this message belongs
        * to the currently open conversation.
@@ -348,9 +355,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
        * Add message to UI.
        */
       setMessages((prev) => {
-        /*
-         * Prevent duplicates.
-         */
+        //Prevent duplicates.
         const alreadyExists = prev.some(
           (existing) => existing.id === message.id,
         );
@@ -359,9 +364,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           return prev;
         }
 
-        /*
-         * New messages go at the end.
-         */
+        // Only auto-scroll when I sent the message.
+        shouldScrollToBottomRef.current = senderId === currentUser.id;
+
+        // New messages go at the end.
         return [...prev, message];
       });
     };
@@ -378,6 +384,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       socket.off("new_message", handleNewMessage);
     };
   }, [conversation.id]);
+  // please check the above the depended conversation id
 
   /*
    * =====================================================
@@ -674,6 +681,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         hasMoreMessages={hasMoreMessages}
         isLoadingOlderMessages={isLoadingMessages}
         conversationType={conversation.type}
+        shouldScrollToBottomRef={shouldScrollToBottomRef}
       />
       {/* ================================================= */}
       {/* MESSAGE INPUT */}

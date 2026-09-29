@@ -9,6 +9,8 @@ import { User, Conversation } from "../../types/types";
 import { MessageSquare, ArrowLeft } from "lucide-react";
 import { chatApi } from "../../api/chat.api";
 
+import { socket } from "../../lib/socket";
+
 interface MessengerLayoutProps {
   currentUser: User;
   onLogout: () => void;
@@ -28,8 +30,6 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
 
-  // const [conversations, setConversations] = useState([]);
-
   const isSettings = location.pathname.includes("/settings");
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -48,10 +48,8 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
 
         setActiveConversation(active);
       } else {
-        setActiveConversation(result[0] ?? null);
+        // setActiveConversation(result[0] ?? null);
       }
-
-      return result;
     } catch (error) {
       console.error("Failed to load conversations:", error);
       return [];
@@ -60,14 +58,107 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
 
   useEffect(() => {
     loadConversations();
-  }, [currentUser.id, conversationId, refreshKey]);
+  }, [currentUser.id, refreshKey]);
+
+  // listening new messages for viewing conversation
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNewMessage = ({ conversationId, message }) => {
+      setConversations((previous) => {
+        const conversation = previous.find(
+          (conversation) => conversation.id === conversationId,
+        );
+
+        if (!conversation) {
+          return previous;
+        }
+
+        const updatedConversation = {
+          ...conversation,
+          lastMessage: message,
+        };
+
+        return [
+          updatedConversation,
+          ...previous.filter(
+            (conversation) => conversation.id !== conversationId,
+          ),
+        ];
+      });
+    };
+
+    socket.on("new_message", handleNewMessage);
+
+    return () => {
+      socket.off("new_message", handleNewMessage);
+    };
+  }, [socket]);
+
+  // listening new messages for non viewing conversation
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleConversationMessage = ({ conversationId, message }) => {
+      setConversations((previous) => {
+        const conversation = previous.find(
+          (conversation) => conversation.id === conversationId,
+        );
+
+        if (!conversation) {
+          return previous;
+        }
+
+        const updatedConversation = {
+          ...conversation,
+          lastMessage: message,
+          unreadCount: conversation.unreadCount + 1,
+        };
+
+        return [
+          updatedConversation,
+          ...previous.filter(
+            (conversation) => conversation.id !== conversationId,
+          ),
+        ];
+      });
+    };
+
+    socket.on("conversation:new_message", handleConversationMessage);
+
+    return () => {
+      socket.off("conversation:new_message", handleConversationMessage);
+    };
+  }, [socket]);
 
   const handleRefresh = () => {
     setRefreshKey((prev) => prev + 1);
   };
 
-  const handleSelectConversation = (id: string) => {
-    navigate(`/app/chat/${id}`);
+  useEffect(() => {
+    console.log("rendered");
+  }, [conversations]);
+
+  const handleSelectConversation = (conversationId: string) => {
+    // // Select conversation
+    const conversation = conversations.find(
+      (conversation) => conversation.id === conversationId,
+    );
+    setActiveConversation(conversation);
+
+    // Immediately remove unread count from UI
+    setConversations((previous) =>
+      previous.map((conversation) =>
+        conversation.id === conversationId
+          ? {
+              ...conversation,
+              unreadCount: 0,
+            }
+          : conversation,
+      ),
+    );
+
+    navigate(`/app/chat/${conversationId}`);
   };
 
   const handleUserAdded = async (user: User) => {
@@ -86,6 +177,8 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
     handleRefresh();
     navigate(`/app/chat/${group.id}`);
   };
+
+  console.log("called the messenger layout");
 
   return (
     <div className="h-screen w-screen bg-black text-zinc-100 flex overflow-hidden font-sans">

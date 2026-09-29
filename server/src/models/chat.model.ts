@@ -155,15 +155,173 @@ export class ChatModel {
    * - Enriched members list with embedded User objects
    * - The single most recent message (with optional attachment)
    */
+  //   static async getConversationsForUser(userId: string) {
+  //     const query = ` WITH user_conversations AS (
+  //         -- 1. Find all active conversations for the current user
+  //         SELECT cm.conversation_id
+  //         FROM conversation_members AS cm
+  //         WHERE cm.user_id = $1
+  //           AND cm.left_at IS NULL
+  //           AND cm.hidden_at IS NULL
+  //     ),
+
+  //   last_messages AS (
+  //       -- 2. Get the latest non-deleted message per conversation
+  //       SELECT DISTINCT ON (m.conversation_id)
+  //           m.id,
+  //           m.conversation_id AS "conversationId",
+  //           m.sender_id AS "senderId",
+  //           m.type,
+  //           m.content,
+  //           m.created_at AS "createdAt",
+  //           m.updated_at AS "updatedAt",
+  //           CASE
+  //               WHEN ma.id IS NOT NULL THEN json_build_object(
+  //                   'id', ma.id,
+  //                   'storageKey', ma.storage_key,
+  //                   'filename', ma.filename,
+  //                   'mimeType', ma.mime_type,
+  //                   'size', ma.size,
+  //                   'url', ma.url
+  //               )
+  //             ELSE NULL
+  //           END AS attachment
+  //       FROM messages AS m
+  //       LEFT JOIN message_attachments AS ma
+  //           ON ma.id = m.attachment_id
+  //       WHERE m.conversation_id IN (
+  //           SELECT conversation_id
+  //           FROM user_conversations
+  //       )
+  //         AND m.deleted_at IS NULL
+  //       ORDER BY
+  //           m.conversation_id,
+  //           m.created_at DESC,
+  //           m.id DESC
+  //   ),
+
+  //   conversation_members_data AS (
+  //       -- 3. Get active members with their user data
+  //       SELECT
+  //           cm.conversation_id,
+  //           json_agg(
+  //               json_build_object(
+  //                   'conversationId', cm.conversation_id,
+  //                   'userId', cm.user_id,
+  //                   'role', cm.role,
+  //                   'joinedAt', cm.joined_at,
+  //                   'leftAt', cm.left_at,
+  //                   'hiddenAt', cm.hidden_at,
+  //                   'user', json_build_object(
+  //                       'id', u.id,
+  //                       'uid', u.uid,
+  //                       'username', u.username,
+  //                       'email', u.email,
+  //                       'displayName', u.display_name,
+  //                       'avatarUrl', u.avatar_url,
+  //                       'createdAt', u.created_at
+  //                   )
+  //               )
+  //               ORDER BY cm.joined_at ASC
+  //           ) AS members
+  //       FROM conversation_members AS cm
+  //       INNER JOIN users AS u
+  //           ON u.id = cm.user_id
+  //       WHERE cm.conversation_id IN (
+  //           SELECT conversation_id
+  //           FROM user_conversations
+  //       )
+  //         AND cm.left_at IS NULL
+  //         AND cm.hidden_at IS NULL
+  //       GROUP BY cm.conversation_id
+  //   )
+
+  // -- 4. Combine conversations with members and latest message
+  //     SELECT
+  //         c.id,
+  //         c.type,
+
+  //         CASE
+  //             WHEN c.type = 'DIRECT' THEN (
+  //                 SELECT u2.display_name
+  //                 FROM conversation_members AS cm2
+  //                 INNER JOIN users AS u2
+  //                     ON u2.id = cm2.user_id
+  //                 WHERE cm2.conversation_id = c.id
+  //                   AND cm2.user_id != $1
+  //                 ORDER BY cm2.joined_at ASC
+  //                 LIMIT 1
+  //             )
+  //             ELSE c.name
+  //         END AS name,
+
+  //         CASE
+  //             WHEN c.type = 'DIRECT' THEN (
+  //                 SELECT u2.avatar_url
+  //                 FROM conversation_members AS cm2
+  //                 INNER JOIN users AS u2
+  //                     ON u2.id = cm2.user_id
+  //                 WHERE cm2.conversation_id = c.id
+  //                   AND cm2.user_id != $1
+  //                 ORDER BY cm2.joined_at ASC
+  //                 LIMIT 1
+  //             )
+  //             ELSE c.avatar_url
+  //         END AS "avatarUrl",
+
+  //         c.created_by AS "createdBy",
+  //         c.created_at AS "createdAt",
+  //         c.updated_at AS "updatedAt",
+
+  //         COALESCE(
+  //             cmd.members,
+  //             '[]'::json
+  //         ) AS members,
+
+  //         to_jsonb(lm) - 'conversationId' AS "lastMessage"
+
+  //     FROM conversations AS c
+
+  //     INNER JOIN user_conversations AS uc
+  //         ON uc.conversation_id = c.id
+
+  //     LEFT JOIN conversation_members_data AS cmd
+  //         ON cmd.conversation_id = c.id
+
+  //     LEFT JOIN last_messages AS lm
+  //         ON lm."conversationId" = c.id
+
+  //     ORDER BY
+  //         COALESCE(lm."createdAt", c.created_at) DESC;
+  //       `;
+
+  //     const { rows } = await pool.query(query, [userId]);
+  //     return rows;
+  //   }
+
   static async getConversationsForUser(userId: string) {
-    const query = ` WITH user_conversations AS (
-        -- 1. Find all active conversations for the current user
-        SELECT cm.conversation_id
-        FROM conversation_members AS cm
-        WHERE cm.user_id = $1
-          AND cm.left_at IS NULL
-          AND cm.hidden_at IS NULL
-    ),
+    const query = `WITH user_conversations AS (
+    SELECT
+        cm.conversation_id,
+        cm.last_read_seq
+    FROM conversation_members AS cm
+    WHERE cm.user_id = $1
+      AND cm.left_at IS NULL
+      AND cm.hidden_at IS NULL
+),
+
+  unread_counts AS (
+      SELECT
+          uc.conversation_id,
+          COUNT(*)::int AS unread_count
+      FROM user_conversations AS uc
+      INNER JOIN messages AS m
+          ON m.conversation_id = uc.conversation_id
+      WHERE m.seq > uc.last_read_seq
+        AND m.deleted_at IS NULL
+        AND m.sender_id <> $1
+      GROUP BY uc.conversation_id
+  ),
 
   last_messages AS (
       -- 2. Get the latest non-deleted message per conversation
@@ -272,6 +430,7 @@ export class ChatModel {
         c.created_by AS "createdBy",
         c.created_at AS "createdAt",
         c.updated_at AS "updatedAt",
+        COALESCE(ucnt.unread_count, 0) AS "unreadCount",
 
         COALESCE(
             cmd.members,
@@ -284,6 +443,9 @@ export class ChatModel {
 
     INNER JOIN user_conversations AS uc
         ON uc.conversation_id = c.id
+
+    LEFT JOIN unread_counts AS ucnt
+    ON ucnt.conversation_id = c.id
 
     LEFT JOIN conversation_members_data AS cmd
         ON cmd.conversation_id = c.id
@@ -389,6 +551,105 @@ export class ChatModel {
     }
   }
 
+  // // newly added
+  // static async getMessages(
+  //   conversationId: string,
+  //   limit: number,
+  //   cursor?: {
+  //     createdAt: string;
+  //     id: string;
+  //   },
+  // ) {
+  //   const query = `
+  //   SELECT
+  //     m.id,
+  //     m.conversation_id AS "conversationId",
+  //     m.sender_id AS "senderId",
+  //     m.type,
+  //     m.content,
+  //     m.created_at AS "createdAt",
+  //     m.updated_at AS "updatedAt",
+
+  //     CASE
+  //       WHEN ma.id IS NOT NULL THEN json_build_object(
+  //         'id', ma.id,
+  //         'storageKey', ma.storage_key,
+  //         'filename', ma.filename,
+  //         'mimeType', ma.mime_type,
+  //         'size', ma.size,
+  //         'url', ma.url
+  //       )
+  //       ELSE NULL
+  //     END AS attachment,
+
+  //     json_build_object(
+  //       'id', u.id,
+  //       'uid', u.uid,
+  //       'username', u.username,
+  //       'displayName', u.display_name,
+  //       'avatarUrl', u.avatar_url
+  //     ) AS sender
+
+  //   FROM messages m
+
+  //   JOIN users u
+  //     ON m.sender_id = u.id
+
+  //   LEFT JOIN message_attachments ma
+  //     ON m.attachment_id = ma.id
+
+  //   WHERE
+  //     m.conversation_id = $1
+  //     AND m.deleted_at IS NULL
+
+  //     ${
+  //       cursor
+  //         ? `AND (
+  //             m.created_at < $2
+  //             OR (
+  //               m.created_at = $2
+  //               AND m.id < $3
+  //             )
+  //           )`
+  //         : ""
+  //     }
+
+  //   ORDER BY m.created_at DESC, m.id DESC
+
+  //   LIMIT $${cursor ? 4 : 2};
+  // `;
+
+  //   const values = cursor
+  //     ? [conversationId, cursor.createdAt, cursor.id, limit + 1]
+  //     : [conversationId, limit + 1];
+
+  //   console.log(values, limit, "limit", cursor, "curson");
+
+  //   const { rows } = await pool.query(query, values);
+
+  //   console.log(rows, "fromt he rows of chat model get messages");
+
+  //   const hasMore = rows.length > limit;
+
+  //   const messages = rows.slice(0, limit);
+
+  //   const lastMessage = messages[messages.length - 1];
+
+  //   const nextCursor =
+  //     hasMore && lastMessage
+  //       ? {
+  //           createdAt: lastMessage.createdAt,
+  //           id: lastMessage.id,
+  //         }
+  //       : null;
+
+  //   return {
+  //     messages: messages.reverse(),
+  //     nextCursor,
+  //     hasMore,
+  //   };
+  // }
+
   // newly added
   static async getMessages(
     conversationId: string,
@@ -407,6 +668,7 @@ export class ChatModel {
       m.content,
       m.created_at AS "createdAt",
       m.updated_at AS "updatedAt",
+      m.seq AS "seq",
 
       CASE 
         WHEN ma.id IS NOT NULL THEN json_build_object(
@@ -530,6 +792,114 @@ export class ChatModel {
     return rows;
   }
 
+  // static async sendMessage(
+  //   conversationId: string,
+  //   senderId: string,
+  //   type: string,
+  //   content?: string,
+  //   attachmentData?: {
+  //     storageKey: string;
+  //     filename: string;
+  //     mimeType: string;
+  //     size: number;
+  //     url: string;
+  //   },
+  // ) {
+  //   const client = await pool.connect();
+
+  //   try {
+  //     await client.query("BEGIN");
+
+  //     let attachmentId: string | null = null;
+
+  //     // 1. Insert file metadata if an attachment exists
+  //     if (attachmentData) {
+  //       const insertAttachmentQuery = `
+  //         INSERT INTO message_attachments (storage_key, filename, mime_type, size, url)
+  //         VALUES ($1, $2, $3, $4, $5)
+  //         RETURNING id;
+  //       `;
+  //       const attRes = await client.query(insertAttachmentQuery, [
+  //         attachmentData.storageKey,
+  //         attachmentData.filename,
+  //         attachmentData.mimeType,
+  //         attachmentData.size,
+  //         attachmentData.url,
+  //       ]);
+  //       attachmentId = attRes.rows[0].id;
+  //     }
+
+  //     // 2. Insert message
+  //     const insertMessageQuery = `
+  //       INSERT INTO messages (conversation_id, sender_id, type, content, attachment_id)
+  //       VALUES ($1, $2, $3, $4, $5)
+  //       RETURNING id;
+  //     `;
+  //     const msgRes = await client.query(insertMessageQuery, [
+  //       conversationId,
+  //       senderId,
+  //       type,
+  //       content || null,
+  //       attachmentId,
+  //     ]);
+  //     const messageId = msgRes.rows[0].id;
+
+  //     // 3. Update conversation activity and unhide conversation
+  //     await client.query(
+  //       `UPDATE conversations SET updated_at = NOW() WHERE id = $1;`,
+  //       [conversationId],
+  //     );
+  //     await client.query(
+  //       `UPDATE conversation_members SET hidden_at = NULL WHERE conversation_id = $1;`,
+  //       [conversationId],
+  //     );
+
+  //     await client.query("COMMIT");
+
+  //     // 4. Return populated message object
+  //     const fetchMessageQuery = `
+  //       SELECT
+  //         m.id,
+  //         m.conversation_id AS "conversationId",
+  //         m.sender_id AS "senderId",
+  //         m.type,
+  //         m.content,
+  //         m.created_at AS "createdAt",
+  //         m.updated_at AS "updatedAt",
+  //         CASE
+  //           WHEN ma.id IS NOT NULL THEN json_build_object(
+  //             'id', ma.id,
+  //             'storageKey', ma.storage_key,
+  //             'filename', ma.filename,
+  //             'mimeType', ma.mime_type,
+  //             'size', ma.size,
+  //             'url', ma.url
+  //           )
+  //           ELSE NULL
+  //         END AS attachment,
+  //         json_build_object(
+  //           'id', u.id,
+  //           'uid', u.uid,
+  //           'username', u.username,
+  //           'displayName', u.display_name,
+  //           'avatarUrl', u.avatar_url
+  //         ) AS sender
+  //       FROM messages m
+  //       JOIN users u ON m.sender_id = u.id
+  //       LEFT JOIN message_attachments ma ON m.attachment_id = ma.id
+  //       WHERE m.id = $1;
+  //     `;
+
+  //     const { rows } = await pool.query(fetchMessageQuery, [messageId]);
+  //     return rows[0];
+  //   } catch (error) {
+  //     await client.query("ROLLBACK");
+  //     throw error;
+  //   } finally {
+  //     client.release();
+  //   }
+  // }
+
   static async sendMessage(
     conversationId: string,
     senderId: string,
@@ -545,18 +915,29 @@ export class ChatModel {
   ) {
     const client = await pool.connect();
 
+    console.log(conversationId);
+
     try {
       await client.query("BEGIN");
 
       let attachmentId: string | null = null;
 
-      // 1. Insert file metadata if an attachment exists
+      /*
+       * 1. Insert attachment metadata
+       */
       if (attachmentData) {
         const insertAttachmentQuery = `
-          INSERT INTO message_attachments (storage_key, filename, mime_type, size, url)
-          VALUES ($1, $2, $3, $4, $5)
-          RETURNING id;
-        `;
+        INSERT INTO message_attachments (
+          storage_key,
+          filename,
+          mime_type,
+          size,
+          url
+        )
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id;
+      `;
+
         const attRes = await client.query(insertAttachmentQuery, [
           attachmentData.storageKey,
           attachmentData.filename,
@@ -564,48 +945,123 @@ export class ChatModel {
           attachmentData.size,
           attachmentData.url,
         ]);
+
         attachmentId = attRes.rows[0].id;
       }
 
-      // 2. Insert message
+      /*
+       * 2. Atomically generate the next message sequence
+       * This UPDATE is safe when multiple users send
+       * messages at the same time.
+       */
+      const seqResult = await client.query(
+        `
+      UPDATE conversations
+      SET
+        last_message_seq = last_message_seq + 1,
+        updated_at = NOW()
+      WHERE id = $1
+      RETURNING last_message_seq;
+      `,
+        [conversationId],
+      );
+
+      if (seqResult.rowCount === 0) {
+        throw new Error("Conversation not found");
+      }
+
+      const seq = Number(seqResult.rows[0].last_message_seq);
+
+      /*
+       * 3. Insert message
+       */
       const insertMessageQuery = `
-        INSERT INTO messages (conversation_id, sender_id, type, content, attachment_id)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id;
-      `;
+      INSERT INTO messages (
+        conversation_id,
+        sender_id,
+        type,
+        content,
+        attachment_id,
+        seq
+      )
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING id;
+    `;
+
       const msgRes = await client.query(insertMessageQuery, [
         conversationId,
         senderId,
         type,
         content || null,
         attachmentId,
+        seq,
       ]);
+
       const messageId = msgRes.rows[0].id;
 
-      // 3. Update conversation activity and unhide conversation
+      /*
+       * IMPORTANT:
+       *
+       * We do NOT update last_read_seq here.
+       *
+       * Sending a message does not mean every member
+       * has read the message.
+       *
+       * last_read_seq will be updated separately when
+       * the user actually reads the conversation.
+       */
+
+      /*
+       * 4. Optional:
+       * Unhide the conversation.
+       *
+       * Only do this if your application logic says that
+       * a new message should make a hidden conversation visible.
+       */
       await client.query(
-        `UPDATE conversations SET updated_at = NOW() WHERE id = $1;`,
-        [conversationId],
-      );
-      await client.query(
-        `UPDATE conversation_members SET hidden_at = NULL WHERE conversation_id = $1;`,
+        `
+      UPDATE conversation_members
+      SET hidden_at = NULL
+      WHERE conversation_id = $1;
+      `,
         [conversationId],
       );
 
+      await client.query(
+        `      
+      
+        UPDATE conversation_members
+        SET
+          last_read_seq = GREATEST(last_read_seq, $1),
+          last_seen_at = NOW()
+        WHERE conversation_id = $2
+        AND user_id = $3
+        AND left_at IS NULL;`,
+        [seq, conversationId, senderId],
+      );
+
+      /*
+       * 5. Commit transaction
+       */
       await client.query("COMMIT");
 
-      // 4. Return populated message object
+      /*
+       * 6. Fetch the complete message after commit
+       */
       const fetchMessageQuery = `
-        SELECT 
-          m.id,
-          m.conversation_id AS "conversationId",
-          m.sender_id AS "senderId",
-          m.type,
-          m.content,
-          m.created_at AS "createdAt",
-          m.updated_at AS "updatedAt",
-          CASE 
-            WHEN ma.id IS NOT NULL THEN json_build_object(
+      SELECT
+        m.id,
+        m.conversation_id AS "conversationId",
+        m.sender_id AS "senderId",
+        m.seq AS "seq",
+        m.type,
+        m.content,
+        m.created_at AS "createdAt",
+        m.updated_at AS "updatedAt",
+
+        CASE
+          WHEN ma.id IS NOT NULL THEN
+            json_build_object(
               'id', ma.id,
               'storageKey', ma.storage_key,
               'filename', ma.filename,
@@ -613,22 +1069,30 @@ export class ChatModel {
               'size', ma.size,
               'url', ma.url
             )
-            ELSE NULL
-          END AS attachment,
-          json_build_object(
-            'id', u.id,
-            'uid', u.uid,
-            'username', u.username,
-            'displayName', u.display_name,
-            'avatarUrl', u.avatar_url
-          ) AS sender
-        FROM messages m
-        JOIN users u ON m.sender_id = u.id
-        LEFT JOIN message_attachments ma ON m.attachment_id = ma.id
-        WHERE m.id = $1;
-      `;
+          ELSE NULL
+        END AS attachment,
+
+        json_build_object(
+          'id', u.id,
+          'uid', u.uid,
+          'username', u.username,
+          'displayName', u.display_name,
+          'avatarUrl', u.avatar_url
+        ) AS sender
+
+      FROM messages m
+
+      JOIN users u
+        ON m.sender_id = u.id
+
+      LEFT JOIN message_attachments ma
+        ON m.attachment_id = ma.id
+
+      WHERE m.id = $1;
+    `;
 
       const { rows } = await pool.query(fetchMessageQuery, [messageId]);
+
       return rows[0];
     } catch (error) {
       await client.query("ROLLBACK");
@@ -638,18 +1102,59 @@ export class ChatModel {
     }
   }
 
+  // static async getAllMessages() {
+  //   const query = `
+  //     SELECT
+  //       m.id,
+  //       m.conversation_id AS "conversationId",
+  //       m.sender_id AS "senderId",
+  //       m.type,
+  //       m.content,
+  //       m.created_at AS "createdAt",
+  //       m.updated_at AS "updatedAt",
+  //       CASE
+  //         WHEN ma.id IS NOT NULL THEN json_build_object(
+  //           'id', ma.id,
+  //           'storageKey', ma.storage_key,
+  //           'filename', ma.filename,
+  //           'mimeType', ma.mime_type,
+  //           'size', ma.size,
+  //           'url', ma.url
+  //         )
+  //         ELSE NULL
+  //       END AS attachment,
+  //       json_build_object(
+  //         'id', u.id,
+  //         'uid', u.uid,
+  //         'username', u.username,
+  //         'displayName', u.display_name,
+  //         'avatarUrl', u.avatar_url
+  //       ) AS sender
+  //     FROM messages m
+  //     JOIN users u ON m.sender_id = u.id
+  //     LEFT JOIN message_attachments ma ON m.attachment_id = ma.id
+  //     WHERE m.deleted_at IS NULL
+  //     ORDER BY m.created_at ASC;
+  //   `;
+
+  //   const { rows } = await pool.query(query);
+  //   return rows;
+  // }
   static async getAllMessages() {
     const query = `
-      SELECT 
-        m.id,
-        m.conversation_id AS "conversationId",
-        m.sender_id AS "senderId",
-        m.type,
-        m.content,
-        m.created_at AS "createdAt",
-        m.updated_at AS "updatedAt",
-        CASE 
-          WHEN ma.id IS NOT NULL THEN json_build_object(
+    SELECT
+      m.id,
+      m.conversation_id AS "conversationId",
+      m.sender_id AS "senderId",
+      m.seq AS "seq",
+      m.type,
+      m.content,
+      m.created_at AS "createdAt",
+      m.updated_at AS "updatedAt",
+
+      CASE
+        WHEN ma.id IS NOT NULL THEN
+          json_build_object(
             'id', ma.id,
             'storageKey', ma.storage_key,
             'filename', ma.filename,
@@ -657,23 +1162,32 @@ export class ChatModel {
             'size', ma.size,
             'url', ma.url
           )
-          ELSE NULL
-        END AS attachment,
-        json_build_object(
-          'id', u.id,
-          'uid', u.uid,
-          'username', u.username,
-          'displayName', u.display_name,
-          'avatarUrl', u.avatar_url
-        ) AS sender
-      FROM messages m
-      JOIN users u ON m.sender_id = u.id
-      LEFT JOIN message_attachments ma ON m.attachment_id = ma.id
-      WHERE m.deleted_at IS NULL
-      ORDER BY m.created_at ASC;
-    `;
+        ELSE NULL
+      END AS attachment,
+
+      json_build_object(
+        'id', u.id,
+        'uid', u.uid,
+        'username', u.username,
+        'displayName', u.display_name,
+        'avatarUrl', u.avatar_url
+      ) AS sender
+
+    FROM messages m
+
+    JOIN users u
+      ON m.sender_id = u.id
+
+    LEFT JOIN message_attachments ma
+      ON m.attachment_id = ma.id
+
+    WHERE m.deleted_at IS NULL
+
+    ORDER BY m.created_at ASC;
+  `;
 
     const { rows } = await pool.query(query);
+
     return rows;
   }
 

@@ -54,6 +54,7 @@ export interface Conversation {
   updatedAt: string;
   members: ConversationMember[];
   lastMessage?: Message;
+  unreadCount: number;
 }
 
 export interface AuthState {

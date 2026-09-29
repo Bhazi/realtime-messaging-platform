@@ -1,7 +1,10 @@
 import { redis } from "../../config/redis.js";
+import { UserModel } from "../../models/user.model.js";
 
 export class PresenceCache {
-  private static readonly TTL_SECONDS = 60;
+  private static readonly TTL_SECONDS = 6000000;
+
+  private static readonly ONLINE_KEY = "presence:online";
 
   private static getConnectionsKey(userId: string): string {
     return `user:${userId}:connections`;
@@ -11,14 +14,18 @@ export class PresenceCache {
     return `presence:connection:${connectionId}`;
   }
 
-  /**
-   * Mark a browser connection as online.
-   *
-   * Example:
-   *
-   * user:alice:connections
-   *   connection-123 -> node-a
-   */
+  private static getConversationMembersKey(conversationId: string): string {
+    return `conversation:${conversationId}:members`;
+  }
+
+  private static getConversationViewersKey(conversationId: string): string {
+    return `conversation:${conversationId}:viewers`;
+  }
+
+  // =========================================================
+  // ONLINE
+  // =========================================================
+
   static async setOnline(
     userId: string,
     connectionId: string,
@@ -26,6 +33,7 @@ export class PresenceCache {
     ttlSeconds = this.TTL_SECONDS,
   ): Promise<void> {
     const connectionsKey = this.getConnectionsKey(userId);
+
     const connectionKey = this.getConnectionKey(connectionId);
 
     await redis
@@ -34,15 +42,14 @@ export class PresenceCache {
       .set(connectionKey, serverId, {
         EX: ttlSeconds,
       })
+      .sAdd(this.ONLINE_KEY, userId)
       .exec();
   }
 
-  /**
-   * Refresh the browser connection TTL.
-   *
-   * The Node process handling the WebSocket should call this
-   * periodically while the connection is alive.
-   */
+  // =========================================================
+  // HEARTBEAT
+  // =========================================================
+
   static async heartbeat(
     userId: string,
     connectionId: string,
@@ -53,8 +60,21 @@ export class PresenceCache {
     const exists = await redis.exists(connectionKey);
 
     if (!exists) {
-      // Connection is no longer considered alive.
-      await redis.hDel(this.getConnectionsKey(userId), connectionId);
+      const connectionsKey = this.getConnectionsKey(userId);
+
+      await redis.hDel(connectionsKey, connectionId);
+
+      // Check whether another connection
+      // is still alive.
+      const remaining = await this.hasActiveConnection(userId);
+
+      if (!remaining) {
+        await redis
+          .multi()
+          .del(connectionsKey)
+          .sRem(this.ONLINE_KEY, userId)
+          .exec();
+      }
 
       return false;
     }
@@ -64,16 +84,16 @@ export class PresenceCache {
     return true;
   }
 
-  /**
-   * Remove a browser connection.
-   *
-   * Called when the WebSocket closes/disconnects.
-   */
+  // =========================================================
+  // REMOVE CONNECTION
+  // =========================================================
+
   static async removeConnection(
     userId: string,
     connectionId: string,
   ): Promise<boolean> {
     const connectionsKey = this.getConnectionsKey(userId);
+
     const connectionKey = this.getConnectionKey(connectionId);
 
     await redis
@@ -82,21 +102,26 @@ export class PresenceCache {
       .hDel(connectionsKey, connectionId)
       .exec();
 
-    // Remove the user's hash when there are no connections.
-    const remaining = await redis.hLen(connectionsKey);
+    const remaining = await this.hasActiveConnection(userId);
 
-    if (remaining === 0) {
-      await redis.del(connectionsKey);
+    if (!remaining) {
+      await redis
+        .multi()
+        .del(connectionsKey)
+        .sRem(this.ONLINE_KEY, userId)
+        .exec();
+
       return false;
     }
 
     return true;
   }
 
-  /**
-   * Check whether the user currently has an active browser connection.
-   */
-  static async isOnline(userId: string): Promise<boolean> {
+  // =========================================================
+  // CHECK ACTIVE CONNECTION
+  // =========================================================
+
+  private static async hasActiveConnection(userId: string): Promise<boolean> {
     const connectionsKey = this.getConnectionsKey(userId);
 
     const connections = await redis.hKeys(connectionsKey);
@@ -105,7 +130,6 @@ export class PresenceCache {
       return false;
     }
 
-    // Check whether at least one connection is still alive.
     for (const connectionId of connections) {
       const exists = await redis.exists(this.getConnectionKey(connectionId));
 
@@ -113,27 +137,40 @@ export class PresenceCache {
         return true;
       }
 
-      // Clean up expired connection.
+      // Remove expired connection
       await redis.hDel(connectionsKey, connectionId);
     }
-
-    // No active connections remain.
-    await redis.del(connectionsKey);
 
     return false;
   }
 
-  /**
-   * Get online status for multiple users.
-   *
-   * Example:
-   *
-   * {
-   *   alice: true,
-   *   bob: false,
-   *   charlie: true
-   * }
-   */
+  // =========================================================
+  // IS ONLINE
+  // =========================================================
+
+  static async isOnline(userId: string): Promise<boolean> {
+    const online = await this.hasActiveConnection(userId);
+
+    if (!online) {
+      await redis
+        .multi()
+        .del(this.getConnectionsKey(userId))
+        .sRem(this.ONLINE_KEY, userId)
+        .exec();
+
+      return false;
+    }
+
+    // Make sure the index exists.
+    await redis.sAdd(this.ONLINE_KEY, userId);
+
+    return true;
+  }
+
+  // =========================================================
+  // GET ONLINE USERS
+  // =========================================================
+
   static async getOnlineUsers(
     userIds: string[],
   ): Promise<Record<string, boolean>> {
@@ -143,12 +180,101 @@ export class PresenceCache {
 
     const result: Record<string, boolean> = {};
 
-    await Promise.all(
-      userIds.map(async (userId) => {
-        result[userId] = await this.isOnline(userId);
-      }),
-    );
+    for (const userId of userIds) {
+      result[userId] = await this.isOnline(userId);
+    }
 
     return result;
+  }
+
+  // =========================================================
+  // CONVERSATION MEMBERS
+  // =========================================================
+
+  static async addConversationMember(
+    conversationId: string,
+    userId: string,
+  ): Promise<void> {
+    await redis.sAdd(this.getConversationMembersKey(conversationId), userId);
+  }
+
+  static async removeConversationMember(
+    conversationId: string,
+    userId: string,
+  ): Promise<void> {
+    await redis.sRem(this.getConversationMembersKey(conversationId), userId);
+  }
+
+  static async getConversationMembers(
+    conversationId: string,
+  ): Promise<string[]> {
+    return redis.sMembers(this.getConversationMembersKey(conversationId));
+  }
+
+  // =========================================================
+  // CONVERSATION VIEWERS
+  // =========================================================
+
+  static async addConversationViewer(
+    conversationId: string,
+    userId: string,
+  ): Promise<void> {
+    await redis.sAdd(this.getConversationViewersKey(conversationId), userId);
+  }
+
+  static async removeConversationViewer(
+    conversationId: string,
+    userId: string,
+  ): Promise<void> {
+    await redis.sRem(this.getConversationViewersKey(conversationId), userId);
+  }
+
+  static async getConversationViewers(
+    conversationId: string,
+  ): Promise<string[]> {
+    return redis.sMembers(this.getConversationViewersKey(conversationId));
+  }
+
+  // =========================================================
+  // GET ONLINE NON-VIEWING MEMBERS
+  // =========================================================
+
+  static async rebuildConversationMembersCache(): Promise<void> {
+    const allConversationIds = await UserModel.AllConversationIds();
+
+    for (const id of allConversationIds) {
+      const userIds = await UserModel.getAllUserIdsInConversation(id);
+
+      for (const userId of userIds) {
+        await this.addConversationMember(id, userId);
+      }
+    }
+  }
+
+  static async getOnlineNonViewingMembers(
+    conversationId: string,
+    senderId: string,
+  ): Promise<string[]> {
+    // await this.rebuildConversationMembersCache();
+
+    const membersKey = this.getConversationMembersKey(conversationId);
+
+    const viewersKey = this.getConversationViewersKey(conversationId);
+
+    // members ∩ online
+    const onlineMembers = await redis.sInter([membersKey, this.ONLINE_KEY]);
+
+    if (onlineMembers.length === 0) {
+      return [];
+    }
+
+    // Remove users currently viewing
+    const viewers = await redis.sMembers(viewersKey);
+
+    const viewerSet = new Set(viewers);
+
+    return onlineMembers.filter(
+      (userId) => userId !== senderId && !viewerSet.has(userId),
+    );
   }
 }

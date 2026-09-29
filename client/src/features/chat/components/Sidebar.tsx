@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Settings, Users, UserPlus, FolderPlus, LogOut } from "lucide-react";
+import { Settings, UserPlus, FolderPlus, LogOut } from "lucide-react";
 import { Conversation, User } from "../../../types/types";
 import { LumaLogo } from "../../../components/LumaLogo";
 
@@ -113,44 +113,153 @@ export const Sidebar: React.FC<SidebarProps> = ({
               ) : (
                 personalChats.map((chat, index) => {
                   const isActive = chat.id === activeConversationId;
+
                   return (
                     <motion.div
                       key={chat.id}
-                      initial={{ opacity: 0, y: -10 }}
+                      initial={{ opacity: 0, y: -6 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{
-                        duration: 0.25,
+                        duration: 0.2,
                         ease: "easeOut",
-                        delay: index * 0.1,
+                        delay: index * 0.05,
                       }}
                     >
                       <button
                         onClick={() => onSelectConversation(chat.id)}
-                        className={`w-full p-2.5 rounded-2xl flex items-center gap-3 transition-all cursor-pointer ${
-                          isActive
-                            ? "bg-indigo-600/20 border border-indigo-500/50 text-white shadow-lg shadow-indigo-600/10"
-                            : "text-zinc-300 hover:bg-zinc-900 border border-transparent"
-                        }`}
+                        // onClick={() => handleSelectConversation(chat)}
+                        className={`
+                          relative w-full
+                          flex items-center gap-3
+                          px-3 py-2.5
+                          rounded-xl
+                          cursor-pointer
+                          text-left
+                          transition-colors duration-200
+                          ${
+                            isActive
+                              ? "bg-zinc-800/80 text-white"
+                              : "text-zinc-300 hover:bg-zinc-800/50"
+                          }
+                        `}
                       >
-                        <img
-                          src={`http://localhost:5000${chat.avatarUrl}`}
-                          alt={chat.name}
-                          className="w-9 h-9 rounded-full object-cover border border-zinc-700 flex-shrink-0"
-                        />
-                        <div className="flex-1 text-left truncate">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-semibold truncate text-white">
-                              {chat.name
-                                ? chat.name.charAt(0).toUpperCase() +
-                                  chat.name.slice(1).toLowerCase()
-                                : null}
-                            </span>
+                        {/* Active indicator */}
+                        {isActive && (
+                          <span
+                            className="
+                              absolute left-0 top-1/2
+                              -translate-y-1/2
+                              w-[3px] h-7
+                              rounded-r-full
+                              bg-indigo-500
+                            "
+                          />
+                        )}
+
+                        {/* Avatar */}
+                        <div
+                          className="
+                            w-10 h-10
+                            rounded-full
+                            flex items-center justify-center
+                            flex-shrink-0
+                            overflow-hidden
+                            bg-zinc-800
+                            border border-zinc-700
+                          "
+                        >
+                          {chat.avatarUrl ? (
+                            <img
+                              src={`http://localhost:5000${chat.avatarUrl}`}
+                              alt={chat.name || "User"}
+                              className="
+                                w-full h-full
+                                object-cover
+                                block
+                              "
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+
+                                const fallback =
+                                  e.currentTarget.nextElementSibling;
+
+                                if (fallback) {
+                                  fallback.style.display = "flex";
+                                }
+                              }}
+                            />
+                          ) : null}
+
+                          {/* Avatar fallback */}
+                          <div
+                            className={`
+                              ${chat.avatarUrl ? "hidden" : "flex"}
+                              w-full h-full
+                              items-center justify-center
+                              rounded-full
+                              font-semibold
+                              text-sm
+                              uppercase
+                              ${
+                                isActive
+                                  ? "bg-emerald-500/10 text-emerald-400"
+                                  : "bg-zinc-800 text-zinc-400"
+                              }
+                            `}
+                          >
+                            {chat.name?.trim()?.charAt(0)?.toUpperCase() || "U"}
                           </div>
-                          <p className="text-[11px] text-zinc-500 truncate">
+                        </div>
+
+                        {/* Name + Last Message */}
+                        <div className="flex-1 min-w-0">
+                          <div
+                            className={`
+                              text-[13px]
+                              font-medium
+                              truncate
+                              ${isActive ? "text-white" : "text-zinc-200"}
+                            `}
+                          >
+                            {chat.name
+                              ? chat.name.charAt(0).toUpperCase() +
+                                chat.name.slice(1).toLowerCase()
+                              : "Unknown"}
+                          </div>
+
+                          <p
+                            className={`
+                              mt-0.5
+                              text-[11px]
+                              truncate
+                              ${chat.unreadCount > 0 ? "text-zinc-300" : "text-zinc-500"}
+                            `}
+                          >
                             {renderLastMessageSnippet(chat.lastMessage) ||
                               "Direct chat"}
                           </p>
                         </div>
+
+                        {/* Unread Count */}
+                        {chat.unreadCount > 0 && (
+                          <span
+                            className="
+                              flex-shrink-0
+                              min-w-[20px]
+                              h-5
+                              px-1.5
+                              rounded-full
+                              bg-emerald-500
+                              text-white
+                              text-[10px]
+                              font-semibold
+                              leading-none
+                              flex items-center justify-center
+                            "
+                          >
+                            {chat.unreadCount > 99 ? "99+" : chat.unreadCount}
+                          </span>
+                        )}
                       </button>
                     </motion.div>
                   );
@@ -196,36 +305,149 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   return (
                     <motion.div
                       key={chat.id}
-                      initial={{ opacity: 0, y: -10 }}
+                      initial={{ opacity: 0, y: -6 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{
-                        duration: 0.25,
+                        duration: 0.2,
                         ease: "easeOut",
-                        delay: index * 0.1,
+                        delay: index * 0.05,
                       }}
                     >
                       <button
                         onClick={() => onSelectConversation(chat.id)}
-                        className={`w-full p-2.5 rounded-2xl flex items-center gap-3 transition-all cursor-pointer ${
-                          isActive
-                            ? "bg-purple-600/20 border border-purple-500/50 text-white shadow-lg shadow-purple-600/10"
-                            : "text-zinc-300 hover:bg-zinc-900 border border-transparent"
-                        }`}
+                        className={`
+                          relative w-full
+                          px-3 py-2.5
+                          rounded-xl
+                          flex items-center gap-3
+                          cursor-pointer
+                          transition-all duration-200
+                          border
+                          ${
+                            isActive
+                              ? "bg-purple-500/[0.08] border-purple-500/20 text-white"
+                              : "bg-transparent border-transparent text-zinc-300 hover:bg-zinc-800/60"
+                          }
+                        `}
                       >
-                        <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center font-bold text-xs flex-shrink-0">
-                          <Users size={16} />
+                        {/* Active indicator */}
+                        {isActive && (
+                          <span
+                            className="
+                            absolute left-0
+                            top-1/2 -translate-y-1/2
+                            w-[3px] h-6
+                            rounded-r-full
+                            bg-purple-500
+                          "
+                          />
+                        )}
+
+                        {/* Avatar */}
+                        <div
+                          className={`
+                              w-10 h-10
+                              rounded-full
+                              flex items-center justify-center
+                              flex-shrink-0
+                              overflow-hidden
+                              border
+                              transition-colors duration-200
+                              ${
+                                isActive
+                                  ? "bg-purple-500/15 border-purple-500/25"
+                                  : "bg-zinc-800 border-zinc-700"
+                              }
+                            `}
+                        >
+                          {chat.avatarUrl ? (
+                            <img
+                              src={`http://localhost:5000${chat.avatarUrl}`}
+                              alt={chat.name || "Group"}
+                              className="
+                                w-full h-full
+                                object-cover
+                                block
+                              "
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                                e.currentTarget.nextElementSibling.style.display =
+                                  "flex";
+                              }}
+                            />
+                          ) : null}
+
+                          {/* Fallback avatar */}
+                          <div
+                            className={`
+                              ${chat.avatarUrl ? "hidden" : "flex"}
+                              w-full h-full
+                              items-center justify-center
+                              font-semibold
+                              text-sm
+                              uppercase
+                              ${
+                                isActive
+                                  ? "bg-purple-500/15 text-purple-400"
+                                  : "bg-zinc-800 text-zinc-400"
+                              }
+                            `}
+                          >
+                            {chat.name?.trim()?.charAt(0)?.toUpperCase() || "G"}
+                          </div>
                         </div>
-                        <div className="flex-1 text-left truncate">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-semibold truncate text-white">
-                              {chat.name}
+
+                        {/* Name + Last Message */}
+                        <div className="flex-1 min-w-0 text-left">
+                          <div className="flex items-center justify-between gap-2">
+                            <span
+                              className={`
+                                  text-[12px]
+                                  font-semibold
+                                  truncate
+                                  ${isActive ? "text-white" : "text-zinc-200"}
+                                `}
+                            >
+                              {chat.name
+                                ? chat.name.charAt(0).toUpperCase() +
+                                  chat.name.slice(1).toLowerCase()
+                                : "Unnamed Group"}
                             </span>
                           </div>
-                          <p className="text-[11px] text-zinc-500 truncate">
+
+                          <p
+                            className={`
+                                mt-0.5
+                                text-[11px]
+                                truncate
+                                ${chat.unreadCount > 0 ? "text-zinc-300" : "text-zinc-500"}
+                              `}
+                          >
                             {renderLastMessageSnippet(chat.lastMessage) ||
                               "Group workspace"}
                           </p>
                         </div>
+
+                        {/* Unread Count */}
+                        {chat.unreadCount > 0 && (
+                          <span
+                            className="
+                              flex-shrink-0
+                              min-w-[20px]
+                              h-5
+                              px-1.5
+                              rounded-full
+                              bg-indigo-500
+                              text-white
+                              text-[10px]
+                              font-semibold
+                              leading-none
+                              flex items-center justify-center
+                            "
+                          >
+                            {chat.unreadCount > 99 ? "99+" : chat.unreadCount}
+                          </span>
+                        )}
                       </button>
                     </motion.div>
                   );
