@@ -249,7 +249,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               h-5
                               px-1.5
                               rounded-full
-                              bg-emerald-500
+                              bg-indigo-500
                               text-white
                               text-[10px]
                               font-semibold
