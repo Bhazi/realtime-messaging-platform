@@ -255,6 +255,7 @@ export class PresenceCache {
     conversationId: string,
     senderId: string,
   ): Promise<string[]> {
+    // ToDo if the members are nill in a conversation cache please call this function
     // await this.rebuildConversationMembersCache();
 
     const membersKey = this.getConversationMembersKey(conversationId);

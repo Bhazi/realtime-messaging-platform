@@ -1,29 +1,26 @@
 import express, {
+  type NextFunction,
   type Request,
   type Response,
-  type NextFunction,
 } from "express";
-
+import cookieParser from "cookie-parser";
 import cors from "cors";
 import morgan from "morgan";
-import path from "path";
-import cookieParser from "cookie-parser";
+import path from "node:path";
 
 import authRoutes from "./modules/auth/auth.routes.js";
-import userRoutes from "./modules/user/user.routes.js";
 import chatRoutes from "./modules/chat/chat.routes.js";
 import presenceRoutes from "./modules/presence/presence.routes.js";
-
-const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+import userRoutes from "./modules/user/user.routes.js";
 
 const app = express();
 
-/*
- * =====================================================
- * EXPRESS MIDDLEWARE
- * =====================================================
- */
+const FRONTEND_URL = process.env.FRONTEND_URL ?? "http://localhost:5173";
+const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
+/**
+ * Middleware
+ */
 app.use(
   cors({
     origin: FRONTEND_URL,
@@ -32,45 +29,21 @@ app.use(
 );
 
 app.use(express.json());
-
 app.use(cookieParser());
-
-/*
- * Serve uploaded files.
- *
- * Example:
- *
- * /uploads/chat/image.jpg
- *
- * becomes:
- *
- * http://localhost:5000/uploads/chat/image.jpg
- */
-
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 if (process.env.NODE_ENV !== "production") {
   app.use(morgan("dev"));
 }
 
-/*
- * =====================================================
- * API ROUTES
- * =====================================================
+/**
+ * Static files
  */
+app.use("/uploads", express.static(UPLOADS_DIR));
 
-app.use("/api/v1/auth", authRoutes);
-app.use("/api/v1/users", userRoutes);
-app.use("/api/v1/chat", chatRoutes);
-app.use("/api/v1/presence", presenceRoutes);
-
-/*
- * =====================================================
- * HEALTH
- * =====================================================
+/**
+ * Health check
  */
-
-app.get("/api/v1", (req: Request, res: Response) => {
+app.get("/api/v1", (_req: Request, res: Response) => {
   res.status(200).json({
     status: "ok",
     service: "messenger-backend",
@@ -78,18 +51,37 @@ app.get("/api/v1", (req: Request, res: Response) => {
   });
 });
 
-/*
- * =====================================================
- * ERROR HANDLER
- * =====================================================
+/**
+ * API routes
  */
+app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/users", userRoutes);
+app.use("/api/v1/chat", chatRoutes);
+app.use("/api/v1/presence", presenceRoutes);
 
-app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-  console.error(`💥 Server Error: ${err.message}`);
+/**
+ * 404 handler
+ */
+app.use((_req: Request, res: Response) => {
+  res.status(404).json({
+    error: "Not Found",
+    message: "The requested resource was not found.",
+  });
+});
+
+/**
+ * Global error handler
+ */
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  console.error("Server error:", err);
+
+  const isDevelopment = process.env.NODE_ENV === "development";
 
   res.status(500).json({
     error: "Internal Server Error",
-    message: process.env.NODE_ENV === "development" ? err.message : undefined,
+    ...(isDevelopment && {
+      message: err.message,
+    }),
   });
 });
 

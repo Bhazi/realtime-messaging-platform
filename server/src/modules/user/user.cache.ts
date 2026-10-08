@@ -2,6 +2,10 @@ import { redis } from "../../config/redis.js";
 import UserRow from "../../types/types.js";
 
 export class UserCache {
+  static async deleteUser(userId: string): Promise<void> {
+    await redis.del(this.getKey(userId));
+  }
+
   private static getKey(userId: string): string {
     return `user:${userId}`;
   }
@@ -26,9 +30,5 @@ export class UserCache {
     await redis.set(this.getKey(user.id), JSON.stringify(user), {
       EX: ttlSeconds,
     });
-  }
-
-  static async deleteUser(userId: string): Promise<void> {
-    await redis.del(this.getKey(userId));
   }
 }

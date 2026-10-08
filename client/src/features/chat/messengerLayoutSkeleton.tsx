@@ -1,4 +1,4 @@
-export default function MessengerLayoutSkeleton() {
+export const MessengerLayoutSkeleton = () => {
   return (
     <div className="h-screen w-screen bg-black text-zinc-100 flex overflow-hidden font-sans">
       {/* SIDEBAR */}
@@ -108,4 +108,4 @@ export default function MessengerLayoutSkeleton() {
       </div>
     </div>
   );
-}
+};

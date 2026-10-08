@@ -39,9 +39,20 @@ export interface Message {
   content?: string | null;
   createdAt: string;
   updatedAt?: string;
+  seq: string;
   deletedAt?: string; // soft deletion
   attachment?: MessageAttachment | null;
   sender?: User;
+  receipts: MessageReceipt[];
+}
+
+export interface MessageReceipt {
+  userId: string;
+  username: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  deliveredAt: string | null;
+  readAt: string | null;
 }
 
 export interface Conversation {

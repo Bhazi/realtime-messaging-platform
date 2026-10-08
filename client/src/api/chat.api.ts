@@ -127,27 +127,6 @@ export const chatApi = {
     return await response.json();
   },
 
-  getMessagesAll: async (): Promise<Message[]> => {
-    try {
-      const response = await apiFetch("/chat/messages/all", {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch all messages");
-      }
-
-      const messages: Message[] = await response.json();
-      return messages;
-    } catch (error) {
-      console.error("Error fetching all messages:", error);
-      return [];
-    }
-  },
-
   sendMessage: async (
     conversationId: string,
     senderId: string,

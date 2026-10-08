@@ -4,11 +4,10 @@ import {
   Paperclip,
   Image as ImageIcon,
   Video as VideoIcon,
-  FileText,
   X,
   Upload,
-  Check,
 } from "lucide-react";
+
 import { MessageType } from "../../../types/types";
 
 interface FileUploadModalProps {

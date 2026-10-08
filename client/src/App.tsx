@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-import { MessengerLayout } from "./features/chat/MessengerLayout";
-import MessengerLayoutSkeleton from "./features/chat/messengerLayoutSkeleton";
-
+import { AuthLayout } from "./features/auth/AuthLayout";
 import { LoginForm } from "./features/auth/components/LoginForm";
 import { SignUpForm } from "./features/auth/components/SignUpForm";
-import { AuthLayout } from "./features/auth/AuthLayout";
+import { MessengerLayout } from "./features/chat/MessengerLayout";
+import { MessengerLayoutSkeleton } from "./features/chat/messengerLayoutSkeleton";
 
 import { User } from "./types/types";
 import { socket } from "./lib/socket";
@@ -14,6 +13,8 @@ import { userApi } from "./api/user.api";
 import { authApi } from "./api/auth.api";
 
 import "./index.css";
+
+const HEARTBEAT_INTERVAL = 30_000;
 
 function ProtectedRoute({
   currentUser,
@@ -39,10 +40,11 @@ function ProtectedRoute({
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-
-  // This is initially true while /me is being checked.
   const [isLoadingUser, setIsLoadingUser] = useState(true);
 
+  /**
+   * Restore the authenticated user on application startup.
+   */
   useEffect(() => {
     const loadUser = async () => {
       try {
@@ -58,8 +60,6 @@ export default function App() {
 
     loadUser();
   }, []);
-
-  const HEARTBEAT_INTERVAL = 30_000;
 
   useEffect(() => {
     if (!socket) return;
@@ -82,11 +82,11 @@ export default function App() {
     socket.connect();
 
     const handleConnect = () => {
-      console.log("✅ Socket connected:", socket.id);
+      console.log("Socket connected:", socket.id);
     };
 
     const handleConnectError = (error: Error) => {
-      console.error("❌ Socket connection error:", error.message);
+      console.error("Socket connection error:", error.message);
     };
 
     socket.on("connect", handleConnect);

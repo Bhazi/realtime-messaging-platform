@@ -53,7 +53,7 @@ export class ChatController {
 
       res.status(200).json(conversations);
     } catch (err: any) {
-      console.log("reached the error ", err);
+      console.error("reached the error ", err);
 
       res
         .status(500)
@@ -230,17 +230,6 @@ export class ChatController {
     } catch (err: any) {
       res.status(500).json({
         error: err.message || "Failed to fetch messages.",
-      });
-    }
-  }
-
-  static async getAllMessages(_req: Request, res: Response): Promise<void> {
-    try {
-      const messages = await ChatService.getAllMessages();
-      res.status(200).json(messages);
-    } catch (err: any) {
-      res.status(500).json({
-        error: err.message || "Failed to fetch all messages.",
       });
     }
   }

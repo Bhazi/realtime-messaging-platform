@@ -4,6 +4,132 @@ import { Request, Response } from "express";
 import { UserService } from "./user.services.js";
 
 export class UserController {
+  static async addUserToGroup(req: Request, res: Response): Promise<void> {
+    try {
+      const { conversationId, currentUserId: bodyUserId, targetUid } = req.body;
+      const currentUserId = (req as any).user?.id || bodyUserId;
+
+      if (!currentUserId) {
+        res.status(400).json({ error: "currentUserId is required." });
+        return;
+      }
+
+      const result = await UserService.addUserToGroup(
+        conversationId,
+        currentUserId,
+        targetUid,
+      );
+
+      res.status(200).json({
+        message: "User successfully added to group.",
+        data: result,
+      });
+    } catch (err: any) {
+      const msg = err.message || "Failed to add user to group.";
+      let statusCode = 400;
+
+      if (msg.includes("does not exist")) statusCode = 404;
+      if (msg.includes("Conversation not found")) statusCode = 404;
+      if (msg.includes("Only admins or owners")) statusCode = 403;
+
+      res.status(statusCode).json({ error: msg });
+    }
+  }
+
+  static async changePassword(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId: bodyUserId, oldPassword, newPassword } = req.body;
+      const userId = (req as any).user?.id || bodyUserId;
+
+      if (!userId) {
+        res.status(400).json({ success: false, error: "userId is required." });
+        return;
+      }
+
+      await UserService.changePassword(userId, oldPassword, newPassword);
+
+      res.status(200).json({
+        success: true,
+        message: "Password changed successfully.",
+      });
+    } catch (err: any) {
+      const isPasswordError = err.message === "Incorrect old password.";
+      const statusCode = isPasswordError ? 400 : 500;
+
+      res.status(statusCode).json({
+        success: false,
+        error: err.message || "Failed to change password.",
+      });
+    }
+  }
+
+  /**
+   * DELETE /api/v1/chat/group/:conversationId
+   */
+  static async deleteGroupConversation(
+    req: Request,
+    res: Response,
+  ): Promise<void> {
+    try {
+      const { conversationId } = req.params as { conversationId: string };
+      const currentUserId = (req as any).user?.id || req.body?.currentUserId;
+
+      if (!currentUserId) {
+        res.status(400).json({ error: "currentUserId is required." });
+        return;
+      }
+
+      const result = await UserService.deleteGroupConversation(
+        conversationId,
+        currentUserId,
+      );
+
+      res.status(200).json({
+        message: result.message,
+        data: result,
+      });
+    } catch (err: any) {
+      let statusCode = 400;
+      if (err.message.includes("not found")) statusCode = 404;
+
+      res
+        .status(statusCode)
+        .json({ error: err.message || "Failed to delete group." });
+    }
+  }
+
+  static async deleteDirectConversation(
+    req: Request,
+    res: Response,
+  ): Promise<void> {
+    try {
+      const { conversationId } = req.params as { conversationId: string };
+      const currentUserId = (req as any).user?.id || req.body?.currentUserId;
+
+      if (!currentUserId) {
+        res.status(400).json({ error: "currentUserId is required." });
+        return;
+      }
+
+      const result = await UserService.deleteDirectConversation(
+        conversationId,
+        currentUserId,
+      );
+
+      res.status(200).json({
+        message: result.message,
+        data: result,
+      });
+    } catch (err: any) {
+      let statusCode = 400;
+      if (err.message.includes("not found")) statusCode = 404;
+
+      res
+        .status(statusCode)
+        .json({ error: err.message || "Failed to delete direct chat." });
+    }
+  }
+
   static async getUsers(req: Request, res: Response): Promise<void> {
     try {
       const users = await UserService.getAllUsers();
@@ -11,31 +137,6 @@ export class UserController {
       res.status(200).json({ users });
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Failed to fetch users." });
-    }
-  }
-
-  static async me(req: Request, res: Response): Promise<void> {
-    try {
-      const { userId } = req.auth!;
-
-      const user = await UserService.getUser(userId);
-
-      if (!user) {
-        res.status(404).json({
-          message: "User not found.",
-        });
-        return;
-      }
-
-      res.status(200).json({
-        user,
-      });
-    } catch (error) {
-      console.error("UserController.me error:", error);
-
-      res.status(500).json({
-        message: "Internal server error.",
-      });
     }
   }
 
@@ -93,237 +194,28 @@ export class UserController {
     }
   }
 
-  static async updateUserProfile(req: Request, res: Response): Promise<void> {
+  static async me(req: Request, res: Response): Promise<void> {
     try {
-      const userId = req.body.userId;
-      const updates = req.body.updates;
+      const { userId } = req.auth!;
 
-      if (!userId) {
-        res.status(401).json({ error: "userId is required in request body." });
+      const user = await UserService.getUser(userId);
+
+      if (!user) {
+        res.status(404).json({
+          message: "User not found.",
+        });
         return;
       }
-
-      if (!updates || typeof updates !== "object") {
-        res.status(400).json({ error: "updates object is required." });
-        return;
-      }
-
-      const updatedUser = await UserService.updateUserProfile(userId, updates);
 
       res.status(200).json({
-        message: "User profile updated successfully.",
-        user: updatedUser,
+        user,
       });
-    } catch (err: any) {
-      const statusCode = err.message === "User not found" ? 404 : 400;
-      res.status(statusCode).json({
-        error: err.message || "Failed to update user profile.",
+    } catch (error) {
+      console.error("UserController.me error:", error);
+
+      res.status(500).json({
+        message: "Internal server error.",
       });
-    }
-  }
-
-  static async changePassword(req: Request, res: Response): Promise<void> {
-    try {
-      const { userId: bodyUserId, oldPassword, newPassword } = req.body;
-      const userId = (req as any).user?.id || bodyUserId;
-
-      if (!userId) {
-        res.status(400).json({ success: false, error: "userId is required." });
-        return;
-      }
-
-      await UserService.changePassword(userId, oldPassword, newPassword);
-
-      res.status(200).json({
-        success: true,
-        message: "Password changed successfully.",
-      });
-    } catch (err: any) {
-      const isPasswordError = err.message === "Incorrect old password.";
-      const statusCode = isPasswordError ? 400 : 500;
-
-      res.status(statusCode).json({
-        success: false,
-        error: err.message || "Failed to change password.",
-      });
-    }
-  }
-
-  static async updateAvatar(req: Request, res: Response): Promise<void> {
-    try {
-      const file = req.file;
-      const { userId: bodyUserId } = req.body;
-      const userId = (req as any).user?.id || bodyUserId;
-
-      if (!userId) {
-        res.status(400).json({ error: "userId is required in formData." });
-        return;
-      }
-
-      if (!file) {
-        res.status(400).json({ error: "No image file provided in request." });
-        return;
-      }
-
-      // Construct accessible image URL path
-      const avatarUrl = `/uploads/avatars/${file.filename}`;
-
-      const updatedUser = await UserService.updateAvatar(userId, avatarUrl);
-
-      res.status(200).json({
-        message: "Avatar updated successfully.",
-        user: updatedUser,
-      });
-    } catch (err: any) {
-      const statusCode = err.message === "User not found." ? 404 : 400;
-      res.status(statusCode).json({
-        error: err.message || "Failed to update avatar.",
-      });
-    }
-  }
-
-  /**
-   * DELETE /api/v1/chat/group/:conversationId
-   */
-  static async deleteGroupConversation(
-    req: Request,
-    res: Response,
-  ): Promise<void> {
-    try {
-      const { conversationId } = req.params as { conversationId: string };
-      const currentUserId = (req as any).user?.id || req.body?.currentUserId;
-
-      if (!currentUserId) {
-        res.status(400).json({ error: "currentUserId is required." });
-        return;
-      }
-
-      const result = await UserService.deleteGroupConversation(
-        conversationId,
-        currentUserId,
-      );
-
-      // Socket event emission if real-time notifications are enabled
-      // if (result.dissolved) {
-      //   io.to(conversationId).emit("group_dissolved", { conversationId });
-      // }
-
-      res.status(200).json({
-        message: result.message,
-        data: result,
-      });
-    } catch (err: any) {
-      let statusCode = 400;
-      if (err.message.includes("not found")) statusCode = 404;
-
-      res
-        .status(statusCode)
-        .json({ error: err.message || "Failed to delete group." });
-    }
-  }
-
-  static async deleteDirectConversation(
-    req: Request,
-    res: Response,
-  ): Promise<void> {
-    try {
-      const { conversationId } = req.params as { conversationId: string };
-      const currentUserId = (req as any).user?.id || req.body?.currentUserId;
-
-      if (!currentUserId) {
-        res.status(400).json({ error: "currentUserId is required." });
-        return;
-      }
-
-      const result = await UserService.deleteDirectConversation(
-        conversationId,
-        currentUserId,
-      );
-
-      // Socket event emission if real-time notifications are enabled
-      // if (result.dissolved) {
-      //   io.to(conversationId).emit("group_dissolved", { conversationId });
-      // }
-
-      res.status(200).json({
-        message: result.message,
-        data: result,
-      });
-    } catch (err: any) {
-      let statusCode = 400;
-      if (err.message.includes("not found")) statusCode = 404;
-
-      res
-        .status(statusCode)
-        .json({ error: err.message || "Failed to delete direct chat." });
-    }
-  }
-
-  /**
-   * PATCH /api/v1/chat/groups/:conversationId/members/role
-   */
-  static async updateGroupMemberRole(
-    req: Request,
-    res: Response,
-  ): Promise<void> {
-    try {
-      const { conversationId } = req.params as { conversationId: string };
-      const { currentUserId, targetUserId, newRole } = req.body;
-
-      // Alternatively, extract currentUserId from authenticated session/JWT middleware:
-      // const currentUserId = (req as any).user?.id;
-
-      const updatedMember = await UserService.updateGroupMemberRole(
-        conversationId,
-        currentUserId,
-        targetUserId,
-        newRole,
-      );
-
-      res.status(200).json({
-        message: `Role updated to ${newRole} successfully.`,
-        data: updatedMember,
-      });
-    } catch (err: any) {
-      let statusCode = 400;
-      if (err.message.includes("owner")) statusCode = 403;
-      if (err.message.includes("not found")) statusCode = 404;
-
-      res
-        .status(statusCode)
-        .json({ error: err.message || "Failed to update role." });
-    }
-  }
-
-  static async addUserToGroup(req: Request, res: Response): Promise<void> {
-    try {
-      const { conversationId, currentUserId: bodyUserId, targetUid } = req.body;
-      const currentUserId = (req as any).user?.id || bodyUserId;
-
-      if (!currentUserId) {
-        res.status(400).json({ error: "currentUserId is required." });
-        return;
-      }
-
-      const result = await UserService.addUserToGroup(
-        conversationId,
-        currentUserId,
-        targetUid,
-      );
-
-      res.status(200).json({
-        message: "User successfully added to group.",
-        data: result,
-      });
-    } catch (err: any) {
-      const msg = err.message || "Failed to add user to group.";
-      let statusCode = 400;
-
-      if (msg.includes("does not exist")) statusCode = 404;
-      if (msg.includes("Conversation not found")) statusCode = 404;
-      if (msg.includes("Only admins or owners")) statusCode = 403;
-
-      res.status(statusCode).json({ error: msg });
     }
   }
 
@@ -366,6 +258,104 @@ export class UserController {
       res
         .status(statusCode)
         .json({ error: err.message || "Failed to remove member." });
+    }
+  }
+
+  static async updateAvatar(req: Request, res: Response): Promise<void> {
+    try {
+      const file = req.file;
+      const { userId: bodyUserId } = req.body;
+      const userId = (req as any).user?.id || bodyUserId;
+
+      if (!userId) {
+        res.status(400).json({ error: "userId is required in formData." });
+        return;
+      }
+
+      if (!file) {
+        res.status(400).json({ error: "No image file provided in request." });
+        return;
+      }
+
+      // Construct accessible image URL path
+      const avatarUrl = `/uploads/avatars/${file.filename}`;
+
+      const updatedUser = await UserService.updateAvatar(userId, avatarUrl);
+
+      res.status(200).json({
+        message: "Avatar updated successfully.",
+        user: updatedUser,
+      });
+    } catch (err: any) {
+      const statusCode = err.message === "User not found." ? 404 : 400;
+      res.status(statusCode).json({
+        error: err.message || "Failed to update avatar.",
+      });
+    }
+  }
+
+  static async updateUserProfile(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = req.body.userId;
+      const updates = req.body.updates;
+
+      if (!userId) {
+        res.status(401).json({ error: "userId is required in request body." });
+        return;
+      }
+
+      if (!updates || typeof updates !== "object") {
+        res.status(400).json({ error: "updates object is required." });
+        return;
+      }
+
+      const updatedUser = await UserService.updateUserProfile(userId, updates);
+
+      res.status(200).json({
+        message: "User profile updated successfully.",
+        user: updatedUser,
+      });
+    } catch (err: any) {
+      const statusCode = err.message === "User not found" ? 404 : 400;
+      res.status(statusCode).json({
+        error: err.message || "Failed to update user profile.",
+      });
+    }
+  }
+
+  /**
+   * PATCH /api/v1/chat/groups/:conversationId/members/role
+   */
+  static async updateGroupMemberRole(
+    req: Request,
+    res: Response,
+  ): Promise<void> {
+    try {
+      const { conversationId } = req.params as { conversationId: string };
+      const { currentUserId, targetUserId, newRole } = req.body;
+
+      // Alternatively, extract currentUserId from authenticated session/JWT middleware:
+      // const currentUserId = (req as any).user?.id;
+
+      const updatedMember = await UserService.updateGroupMemberRole(
+        conversationId,
+        currentUserId,
+        targetUserId,
+        newRole,
+      );
+
+      res.status(200).json({
+        message: `Role updated to ${newRole} successfully.`,
+        data: updatedMember,
+      });
+    } catch (err: any) {
+      let statusCode = 400;
+      if (err.message.includes("owner")) statusCode = 403;
+      if (err.message.includes("not found")) statusCode = 404;
+
+      res
+        .status(statusCode)
+        .json({ error: err.message || "Failed to update role." });
     }
   }
 }

@@ -1,32 +1,32 @@
-import React, { useState, useEffect, useRef } from "react";
-
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
-  Paperclip,
   Image as ImageIcon,
-  Video as VideoIcon,
-  Users,
-  Trash2,
-  Send,
+  Paperclip,
   Plus,
+  Send,
+  Trash2,
+  Users,
+  Video as VideoIcon,
 } from "lucide-react";
+import { motion } from "motion/react";
 
-import { Conversation, MessageType, Message, User } from "../../../types/types";
+import type {
+  Conversation,
+  Message,
+  MessageReceipt,
+  MessageType,
+  User,
+} from "../../../types/types";
 
-import { MessageList } from "./MessageList";
+import { chatApi } from "../../../api/chat.api";
+import { presenceApi } from "../../../api/presence.api";
+import { userApi } from "../../../api/user.api";
+import { socket } from "../../../lib/socket";
 
 import { FileUploadModal } from "./FileUploadModal";
 import { GroupMembersModal } from "./GroupMembersModal";
-
-import { motion } from "motion/react";
-
-import { socket } from "../../../lib/socket";
-
-import { userApi } from "../../../api/user.api";
-import { chatApi } from "../../../api/chat.api";
-
+import { MessageList } from "./MessageList";
 import { RemoveChatModal } from "./RemoveChat";
-
-import { presenceApi } from "../../../api/presence.api";
 
 interface ChatAreaProps {
   conversation: Conversation;
@@ -34,68 +34,78 @@ interface ChatAreaProps {
   onRefresh: () => void;
 }
 
-type Presence = {
+interface Presence {
   userId: string;
   online: boolean;
   lastSeenAt: string | null;
-};
+}
 
-export const ChatArea: React.FC<ChatAreaProps> = ({
+const API_URL = "http://localhost:5000";
+
+export const ChatArea = ({
   conversation,
   currentUser,
   onRefresh,
-}) => {
+}: ChatAreaProps) => {
   const [textMessage, setTextMessage] = useState("");
+  const [messages, setMessages] = useState<Message[]>([]);
+
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+
+  const [participantPresence, setParticipantPresence] = useState<
+    Presence | undefined
+  >();
+
+  const [onlineParticipantIds, setOnlineParticipantIds] = useState<Set<string>>(
+    new Set(),
+  );
 
   const [isRemoveModalOpen, setIsRemoveModalOpen] = useState(false);
+  const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
+  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
 
   const [uploadModalType, setUploadModalType] = useState<MessageType | null>(
     null,
   );
 
-  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
-
-  const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
-
-  const [messages, setMessages] = useState<Message[]>([]);
-
-  const messageInputRef = useRef<HTMLInputElement | null>(null);
-
-  /*
-   * Cursor used to fetch older messages.
-   */
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-
-  /*
-   * Whether older messages exist.
-   */
-  const [hasMoreMessages, setHasMoreMessages] = useState(true);
-
-  /*
-   * Loading state.
-   */
-  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
-
-  const [participantPresence, setParticipantPresence] = useState<Presence>();
-  const [onlineParticipantIds, setOnlineParticipantIds] = useState<Set<string>>(
-    new Set(),
-  );
+  const messageInputRef = useRef<HTMLInputElement>(null);
+  const shouldScrollToBottomRef = useRef(false);
 
   /*
    * =====================================================
-   * ISONLINE
+   * DERIVED VALUES
+   * =====================================================
+   */
+
+  const currentMember = conversation.members.find(
+    (member) => member.userId === currentUser.id,
+  );
+
+  const canManageGroup =
+    conversation.type === "GROUP" &&
+    (currentMember?.role === "OWNER" || currentMember?.role === "ADMIN");
+
+  const isGroup = conversation.type === "GROUP";
+  const isDirect = conversation.type === "DIRECT";
+
+  /*
+   * =====================================================
+   * PRESENCE
    * =====================================================
    */
 
   useEffect(() => {
-    const fetchParticipantPresence = async () => {
-      try {
-        const participantIds = conversation.members
-          .filter(({ userId }) => userId !== currentUser.id)
-          .map(({ userId }) => userId);
+    let cancelled = false;
 
-        // Direct conversation: check the other participant's presence
-        if (conversation.type === "DIRECT") {
+    const fetchPresence = async () => {
+      const participantIds = conversation.members
+        .filter((member) => member.userId !== currentUser.id)
+        .map((member) => member.userId);
+
+      try {
+        if (isDirect) {
           const participantId = participantIds[0];
 
           if (!participantId) {
@@ -105,11 +115,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
           const presence = await presenceApi.isParticipantOnline(participantId);
 
-          setParticipantPresence(presence);
+          if (!cancelled) {
+            setParticipantPresence(presence);
+          }
+
           return;
         }
 
-        // Group conversation: count online participants
         if (participantIds.length === 0) {
           setOnlineParticipantIds(new Set());
           return;
@@ -118,100 +130,45 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         const onlineIds =
           await presenceApi.onlineParticipantsIds(participantIds);
 
-        setOnlineParticipantIds(new Set(onlineIds));
+        if (!cancelled) {
+          setOnlineParticipantIds(new Set(onlineIds));
+        }
       } catch (error) {
-        console.error("Failed to fetch participant presence:", error);
+        if (!cancelled) {
+          console.error("Failed to fetch participant presence:", error);
+        }
       }
     };
 
-    fetchParticipantPresence();
-  }, [conversation.members, conversation.type]);
+    fetchPresence();
 
-  {
-    /* TESTING -------------------------------------------------------------------------------*/
-  }
-  function formatLastSeen(date: string): string {
-    const lastSeenDate = new Date(date);
-    const now = new Date();
-
-    const time = lastSeenDate.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
-
-    // Check if the date is today
-    const isToday =
-      lastSeenDate.getFullYear() === now.getFullYear() &&
-      lastSeenDate.getMonth() === now.getMonth() &&
-      lastSeenDate.getDate() === now.getDate();
-
-    if (isToday) {
-      return `Today ${time}`;
-    }
-
-    // Check if the date is yesterday
-    const yesterday = new Date(now);
-    yesterday.setDate(now.getDate() - 1);
-
-    const isYesterday =
-      lastSeenDate.getFullYear() === yesterday.getFullYear() &&
-      lastSeenDate.getMonth() === yesterday.getMonth() &&
-      lastSeenDate.getDate() === yesterday.getDate();
-
-    if (isYesterday) {
-      return `Yesterday ${time}`;
-    }
-
-    // Within the last 7 days
-    const differenceInMs = now.getTime() - lastSeenDate.getTime();
-    const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
-
-    if (differenceInMs >= 0 && differenceInMs < sevenDaysInMs) {
-      return (
-        lastSeenDate.toLocaleDateString("en-US", {
-          weekday: "short",
-        }) +
-        " " +
-        time
-      );
-    }
-
-    // Older than 7 days
-    return lastSeenDate.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  }
+    return () => {
+      cancelled = true;
+    };
+  }, [conversation.members, currentUser.id, isDirect]);
 
   useEffect(() => {
-    const handlePresenceUpdate = (data: {
-      userId: string;
-      online: boolean;
-      lastSeenAt: string | null;
-    }) => {
-      // Is this user a member of the current conversation?
+    const handlePresenceUpdate = (presence: Presence) => {
       const isMember = conversation.members.some(
-        ({ userId }) => userId === data.userId,
+        (member) => member.userId === presence.userId,
       );
 
-      if (!isMember) {
+      if (!isMember || presence.userId === currentUser.id) {
         return;
       }
 
-      // Only relevant for group conversations
-      if (conversation.type !== "GROUP") {
-        setParticipantPresence(data);
+      if (isDirect) {
+        setParticipantPresence(presence);
+        return;
       }
 
       setOnlineParticipantIds((previous) => {
         const next = new Set(previous);
 
-        if (data.online) {
-          next.add(data.userId);
+        if (presence.online) {
+          next.add(presence.userId);
         } else {
-          next.delete(data.userId);
+          next.delete(presence.userId);
         }
 
         return next;
@@ -223,7 +180,74 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     return () => {
       socket.off("presence:update", handlePresenceUpdate);
     };
-  }, [conversation.type, conversation.members]);
+  }, [conversation.members, currentUser.id, isDirect]);
+
+  /*
+   * =====================================================
+   * HELPERS
+   * =====================================================
+   */
+
+  const formatLastSeen = (date: string): string => {
+    const lastSeenDate = new Date(date);
+    const now = new Date();
+
+    const time = lastSeenDate.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+
+    const isSameDay = (first: Date, second: Date) =>
+      first.getFullYear() === second.getFullYear() &&
+      first.getMonth() === second.getMonth() &&
+      first.getDate() === second.getDate();
+
+    if (isSameDay(lastSeenDate, now)) {
+      return `Today ${time}`;
+    }
+
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (isSameDay(lastSeenDate, yesterday)) {
+      return `Yesterday ${time}`;
+    }
+
+    const differenceInMs = now.getTime() - lastSeenDate.getTime();
+    const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
+
+    if (differenceInMs >= 0 && differenceInMs < sevenDaysInMs) {
+      return `${lastSeenDate.toLocaleDateString("en-US", {
+        weekday: "short",
+      })} ${time}`;
+    }
+
+    return lastSeenDate.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  const updateMessageReceipt = (messageId: string, receipt: MessageReceipt) => {
+    setMessages((previous) =>
+      previous.map((message) => {
+        if (message.id !== messageId) {
+          return message;
+        }
+
+        const receipts = (message.receipts ?? []).filter(
+          (existingReceipt) => existingReceipt.userId !== receipt.userId,
+        );
+
+        return {
+          ...message,
+          receipts: [...receipts, receipt],
+        };
+      }),
+    );
+  };
 
   /*
    * =====================================================
@@ -235,18 +259,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     let cancelled = false;
 
     const fetchMessages = async () => {
+      setMessages([]);
+      setNextCursor(null);
+      setHasMoreMessages(true);
+      setIsLoadingMessages(true);
+
       try {
-        setMessages([]);
-
-        setNextCursor(null);
-
-        setHasMoreMessages(true);
-
-        setIsLoadingMessages(true);
-
-        /*
-         * Load existing messages.
-         */
         const result = await chatApi.getMessages(conversation.id, {
           limit: 20,
         });
@@ -256,21 +274,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         }
 
         setMessages(result.messages);
-
-        const lastMessage = result.messages[result.messages.length - 1];
-
-        if (lastMessage) {
-          console.log("called the conversation");
-
-          socket.emit("conversation:read", {
-            conversationId: conversation.id,
-            lastReadSeq: lastMessage.seq,
-            currentUser,
-          });
-        }
-
         setNextCursor(result.nextCursor);
-
         setHasMoreMessages(result.hasMore);
       } catch (error) {
         if (cancelled) {
@@ -280,9 +284,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         console.error("Failed to load messages:", error);
 
         setMessages([]);
-
         setNextCursor(null);
-
         setHasMoreMessages(false);
       } finally {
         if (!cancelled) {
@@ -292,10 +294,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     };
 
     fetchMessages();
-
-    /*
-     * Focus input.
-     */
     messageInputRef.current?.focus();
 
     return () => {
@@ -310,81 +308,110 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
    */
 
   useEffect(() => {
-    if (!conversation?.id) {
-      return;
-    }
+    const conversationId = conversation.id;
 
-    socket.emit("join_conversation", conversation.id);
+    socket.emit("join_conversation", conversationId);
 
-    console.log("Joined conversation:", conversation.id);
-    /*
-     * Leave when conversation changes
-     * or component unmounts.
-     */
     return () => {
-      socket.emit("leave_conversation", conversation.id);
-
-      console.log("Left conversation:", conversation.id);
+      socket.emit("leave_conversation", conversationId);
     };
   }, [conversation.id]);
 
   /*
    * =====================================================
-   * SOCKET.IO — RECEIVE NEW MESSAGE
+   * SOCKET.IO — MESSAGE RECEIPTS
    * =====================================================
    */
 
-  const shouldScrollToBottomRef = useRef(false);
-
   useEffect(() => {
-    /*
-     * Handle message received from backend.
-     */
-    const handleNewMessage = ({ message, senderId }) => {
-      console.log("New message received:", message);
-
-      /*
-       * Make sure this message belongs
-       * to the currently open conversation.
-       */
-      if (message.conversationId !== conversation.id) {
+    const handleMessageDelivered = ({
+      messageId,
+      conversationId,
+      receipt,
+    }: {
+      messageId: string;
+      conversationId: string;
+      receipt: MessageReceipt;
+    }) => {
+      if (conversationId !== conversation.id) {
         return;
       }
 
-      /*
-       * Add message to UI.
-       */
-      setMessages((prev) => {
-        //Prevent duplicates.
-        const alreadyExists = prev.some(
-          (existing) => existing.id === message.id,
+      updateMessageReceipt(messageId, receipt);
+    };
+
+    socket.on("message:delivered", handleMessageDelivered);
+
+    return () => {
+      socket.off("message:delivered", handleMessageDelivered);
+    };
+  }, [conversation.id]);
+
+  useEffect(() => {
+    const handleMessageRead = ({
+      messageId,
+      conversationId,
+      receipt,
+    }: {
+      messageId: string;
+      conversationId: string;
+      receipt: MessageReceipt;
+    }) => {
+      if (conversationId !== conversation.id) {
+        return;
+      }
+
+      updateMessageReceipt(messageId, receipt);
+    };
+
+    socket.on("message:read", handleMessageRead);
+
+    return () => {
+      socket.off("message:read", handleMessageRead);
+    };
+  }, [conversation.id]);
+
+  /*
+   * =====================================================
+   * SOCKET.IO — NEW MESSAGE
+   * =====================================================
+   */
+
+  useEffect(() => {
+    const handleNewMessage = ({
+      conversationId,
+      message,
+      senderId,
+    }: {
+      conversationId: string;
+      message: Message;
+      senderId: string;
+    }) => {
+      if (conversationId !== conversation.id) {
+        return;
+      }
+
+      setMessages((previous) => {
+        const alreadyExists = previous.some(
+          (existingMessage) => existingMessage.id === message.id,
         );
 
         if (alreadyExists) {
-          return prev;
+          return previous;
         }
 
-        // Only auto-scroll when I sent the message.
         shouldScrollToBottomRef.current = senderId === currentUser.id;
 
-        // New messages go at the end.
-        return [...prev, message];
+        return [...previous, message];
       });
     };
 
-    /*
-     * Start listening.
-     */
     socket.on("new_message", handleNewMessage);
 
-    /*
-     * Cleanup listener.
-     */
     return () => {
       socket.off("new_message", handleNewMessage);
     };
-  }, [conversation.id]);
-  // please check the above the depended conversation id
+  }, [conversation.id, currentUser.id]);
 
   /*
    * =====================================================
@@ -393,43 +420,29 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
    */
 
   const loadOlderMessages = async (): Promise<void> => {
-    /*
-     * Prevent duplicate requests.
-     */
     if (isLoadingMessages || !hasMoreMessages || !nextCursor) {
       return;
     }
 
-    try {
-      setIsLoadingMessages(true);
+    setIsLoadingMessages(true);
 
+    try {
       const result = await chatApi.getMessages(conversation.id, {
         limit: 20,
         cursor: nextCursor,
       });
 
-      /*
-       * Older messages go BEFORE
-       * existing messages.
-       */
-      setMessages((prev) => {
-        const existingIds = new Set(prev.map((message) => message.id));
+      setMessages((previous) => {
+        const existingIds = new Set(previous.map((message) => message.id));
 
-        const newMessages = result.messages.filter(
+        const olderMessages = result.messages.filter(
           (message: Message) => !existingIds.has(message.id),
         );
 
-        return [...newMessages, ...prev];
+        return [...olderMessages, ...previous];
       });
 
-      /*
-       * Update cursor.
-       */
       setNextCursor(result.nextCursor);
-
-      /*
-       * Update hasMore.
-       */
       setHasMoreMessages(result.hasMore);
     } catch (error) {
       console.error("Failed to load older messages:", error);
@@ -440,59 +453,25 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   /*
    * =====================================================
-   * GROUP PERMISSIONS
+   * SEND MESSAGE
    * =====================================================
    */
 
-  const currentMember = conversation.members.find(
-    (m) => m.userId === currentUser.id,
-  );
+  const handleSendText = async (event?: FormEvent) => {
+    event?.preventDefault();
 
-  const canManageGroup =
-    conversation.type === "GROUP" &&
-    (currentMember?.role === "OWNER" || currentMember?.role === "ADMIN");
+    const content = textMessage.trim();
 
-  /*
-   * =====================================================
-   * SEND TEXT
-   * =====================================================
-   */
-
-  const handleSendText = async (e?: React.FormEvent) => {
-    if (e) {
-      e.preventDefault();
-    }
-
-    const messageContent = textMessage.trim();
-
-    /*
-     * Don't send empty message.
-     */
-    if (!messageContent) {
+    if (!content) {
       return;
     }
 
     try {
-      /*
-       * HTTP request.
-       *
-       * Backend saves message and
-       * then broadcasts through Socket.IO.
-       */
       await chatApi.sendMessage(conversation.id, currentUser.id, "TEXT", {
-        content: messageContent,
+        content,
       });
 
-      /*
-       * Clear input.
-       */
       setTextMessage("");
-
-      /*
-       * DO NOT call onRefresh().
-       *
-       * Socket.IO will update messages.
-       */
       messageInputRef.current?.focus();
     } catch (error) {
       console.error("Failed to send message:", error);
@@ -501,7 +480,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   /*
    * =====================================================
-   * SEND FILE / PHOTO / VIDEO
+   * SEND FILE
    * =====================================================
    */
 
@@ -511,19 +490,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     caption?: string,
   ) => {
     try {
-      /*
-       * Still use HTTP/FormData for
-       * the actual file upload.
-       */
       await chatApi.sendMessage(conversation.id, currentUser.id, type, {
         content: caption,
         file,
       });
 
-      /*
-       * Socket.IO will broadcast
-       * the resulting DB message.
-       */
       messageInputRef.current?.focus();
     } catch (error) {
       console.error("Failed to send file:", error);
@@ -540,16 +511,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     try {
       await chatApi.deleteMessage(messageId, currentUser.id);
 
-      /*
-       * Keep your current refresh
-       * until we implement message_deleted
-       * Socket.IO events.
-       */
       onRefresh();
 
       messageInputRef.current?.focus();
-    } catch (err: any) {
-      alert(err.message || "Cannot delete message.");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Cannot delete message.";
+
+      alert(message);
     }
   };
 
@@ -559,13 +528,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
    * =====================================================
    */
 
-  const handleDeleteConversation = async () => {
+  const handleDeleteConversation = () => {
     setIsRemoveModalOpen(true);
   };
 
   const handleRemoveChat = async () => {
     try {
-      if (conversation.type === "GROUP") {
+      if (isGroup) {
         await userApi.deleteGroupConversation(conversation.id, currentUser.id);
       } else {
         await userApi.deleteDirectConversation(conversation.id, currentUser.id);
@@ -574,9 +543,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       onRefresh();
     } catch (error) {
       console.error("Failed to delete conversation:", error);
+    } finally {
+      setIsRemoveModalOpen(false);
     }
-    // Remove chat logic here
-    setIsRemoveModalOpen(false);
   };
 
   /*
@@ -585,33 +554,25 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
    * =====================================================
    */
 
+  const displayName =
+    conversation.name!.charAt(0).toUpperCase() +
+    conversation.name!.slice(1).toLowerCase();
+
   return (
     <motion.div
-      className="flex-1 h-full flex flex-col bg-black text-zinc-100 relative"
-      initial={{
-        opacity: 0,
-      }}
-      animate={{
-        opacity: 1,
-      }}
+      className="relative flex h-full flex-1 flex-col bg-black text-zinc-100"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
       transition={{
         duration: 0.4,
         ease: "easeOut",
       }}
     >
-      {/* ================================================= */}
-      {/* HEADER */}
-      {/* ================================================= */}
-      <motion.div
-        className="px-6 py-4 bg-zinc-950/90 border-b border-zinc-800/80 flex items-center justify-between z-10 backdrop-blur-md"
-        initial={{
-          opacity: 0,
-          y: -10,
-        }}
-        animate={{
-          opacity: 1,
-          y: 0,
-        }}
+      {/* Header */}
+      <motion.header
+        className="z-10 flex items-center justify-between border-b border-zinc-800/80 bg-zinc-950/90 px-6 py-4 backdrop-blur-md"
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
         transition={{
           duration: 0.3,
           ease: "easeOut",
@@ -619,58 +580,58 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       >
         <div className="flex items-center gap-3">
           <img
-            src={`http://localhost:5000${conversation.avatarUrl}`}
-            alt={conversation.name}
-            className="w-10 h-10 rounded-full object-cover border border-zinc-700"
+            src={`${API_URL}${conversation.avatarUrl}`}
+            alt={conversation.name ?? "Conversation"}
+            className="h-10 w-10 rounded-full border border-zinc-700 object-cover"
           />
 
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm sm:text-base font-bold text-white">
-                {conversation.name!.charAt(0).toUpperCase() +
-                  conversation.name!.slice(1).toLowerCase()}
-              </h2>
-            </div>
+            <h2 className="text-sm font-bold text-white sm:text-base">
+              {displayName}
+            </h2>
 
-            {/*Online presence section*/}
-            {conversation.type == "DIRECT" ? (
+            {isDirect ? (
               <p className="text-xs text-zinc-400">
                 {participantPresence?.online
-                  ? "online"
-                  : `Last seen ${formatLastSeen(participantPresence?.lastSeenAt!)}`}
+                  ? "Online"
+                  : participantPresence?.lastSeenAt
+                    ? `Last seen ${formatLastSeen(
+                        participantPresence.lastSeenAt,
+                      )}`
+                    : "Offline"}
               </p>
             ) : (
-              <p className="text-xs text-zinc-400">{`${onlineParticipantIds.size} online`}</p>
+              <p className="text-xs text-zinc-400">
+                {onlineParticipantIds.size} online
+              </p>
             )}
           </div>
         </div>
 
-        {/* Header buttons */}
-
         <div className="flex items-center gap-2">
-          {conversation.type === "GROUP" && (
+          {isGroup && (
             <button
+              type="button"
               onClick={() => setIsMembersModalOpen(true)}
-              className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-medium text-zinc-300 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
             >
               <Users size={14} />
-
               <span>Members ({conversation.members.length})</span>
             </button>
           )}
 
           <button
+            type="button"
             onClick={handleDeleteConversation}
             title="Remove chat from account"
-            className="p-2 rounded-xl bg-zinc-900 hover:bg-rose-500/10 text-zinc-400 hover:text-rose-400 border border-zinc-800 transition-colors cursor-pointer"
+            className="cursor-pointer rounded-xl border border-zinc-800 bg-zinc-900 p-2 text-zinc-400 transition-colors hover:bg-rose-500/10 hover:text-rose-400"
           >
             <Trash2 size={15} />
           </button>
         </div>
-      </motion.div>
-      {/* ================================================= */}
-      {/* MESSAGE LIST */}
-      {/* ================================================= */}
+      </motion.header>
+
+      {/* Messages */}
       <MessageList
         messages={messages}
         currentUserId={currentUser.id}
@@ -683,19 +644,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         conversationType={conversation.type}
         shouldScrollToBottomRef={shouldScrollToBottomRef}
       />
-      {/* ================================================= */}
-      {/* MESSAGE INPUT */}
-      {/* ================================================= */}
+
+      {/* Message input */}
       <motion.div
-        className="p-3 sm:p-4 bg-zinc-950/90 border-t border-zinc-800/80 z-10 backdrop-blur-md"
-        initial={{
-          opacity: 0,
-          y: 20,
-        }}
-        animate={{
-          opacity: 1,
-          y: 0,
-        }}
+        className="z-10 border-t border-zinc-800/80 bg-zinc-950/90 p-3 backdrop-blur-md sm:p-4"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
         transition={{
           duration: 0,
           ease: "easeOut",
@@ -703,18 +657,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       >
         <form
           onSubmit={handleSendText}
-          className="w-full max-w-4xl mx-auto flex items-center gap-6 relative"
+          className="relative mx-auto flex w-full max-w-4xl items-center gap-6"
         >
-          {/* Attachment button */}
-
+          {/* Attachment menu */}
           <div className="relative">
             <button
               type="button"
-              onClick={() => setShowAttachmentMenu(!showAttachmentMenu)}
-              className={`p-2.5 rounded-xl border transition-colors cursor-pointer flex items-center justify-center ${
+              onClick={() => setShowAttachmentMenu((previous) => !previous)}
+              className={`flex cursor-pointer items-center justify-center rounded-xl border p-2.5 transition-colors ${
                 showAttachmentMenu
-                  ? "bg-indigo-600 text-white border-indigo-500"
-                  : "bg-zinc-900 text-zinc-400 hover:text-white border-zinc-800 hover:bg-zinc-800"
+                  ? "border-indigo-500 bg-indigo-600 text-white"
+                  : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-white"
               }`}
               title="Attach media or files"
             >
@@ -728,7 +681,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
             {showAttachmentMenu && (
               <motion.div
-                className="absolute bottom-12 left-0 z-50 bg-zinc-900 border border-zinc-800 rounded-2xl p-2 shadow-2xl flex flex-col gap-1 w-44"
+                className="absolute bottom-12 left-0 z-50 flex w-44 flex-col gap-1 rounded-2xl border border-zinc-800 bg-zinc-900 p-2 shadow-2xl"
                 initial={{
                   opacity: 0,
                   y: 8,
@@ -744,51 +697,39 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   ease: "easeOut",
                 }}
               >
-                {/* PHOTO */}
-
                 <button
                   type="button"
                   onClick={() => {
                     setUploadModalType("PHOTO");
-
                     setShowAttachmentMenu(false);
                   }}
-                  className="w-full px-3 py-2 text-left text-xs font-medium text-zinc-200 hover:bg-zinc-800 rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
+                  className="flex w-full cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-zinc-200 transition-colors hover:bg-zinc-800"
                 >
                   <ImageIcon size={15} className="text-indigo-400" />
-
                   <span>Send Photo</span>
                 </button>
-
-                {/* VIDEO */}
 
                 <button
                   type="button"
                   onClick={() => {
                     setUploadModalType("VIDEO");
-
                     setShowAttachmentMenu(false);
                   }}
-                  className="w-full px-3 py-2 text-left text-xs font-medium text-zinc-200 hover:bg-zinc-800 rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
+                  className="flex w-full cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-zinc-200 transition-colors hover:bg-zinc-800"
                 >
                   <VideoIcon size={15} className="text-purple-400" />
-
                   <span>Send Video</span>
                 </button>
-
-                {/* FILE */}
 
                 <button
                   type="button"
                   onClick={() => {
                     setUploadModalType("FILE");
-
                     setShowAttachmentMenu(false);
                   }}
-                  className="w-full px-3 py-2 text-left text-xs font-medium text-zinc-200 hover:bg-zinc-800 rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
+                  className="flex w-full cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-zinc-200 transition-colors hover:bg-zinc-800"
                 >
                   <Paperclip size={15} className="text-cyan-400" />
-
                   <span>Attach File</span>
                 </button>
               </motion.div>
@@ -796,54 +737,38 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </div>
 
           {/* Input */}
-
           <input
             ref={messageInputRef}
             type="text"
             value={textMessage}
-            onChange={(e) => setTextMessage(e.target.value)}
+            onChange={(event) => setTextMessage(event.target.value)}
             placeholder="Type a message or attach media..."
-            className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors"
+            className="flex-1 rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-xs text-zinc-100 placeholder-zinc-500 transition-colors focus:border-indigo-500 focus:outline-none sm:text-sm"
           />
 
           {/* Send */}
-
           <motion.button
             type="submit"
             disabled={!textMessage.trim()}
-            whileHover={
-              textMessage.trim()
-                ? {
-                    scale: 1.05,
-                  }
-                : undefined
-            }
-            whileTap={
-              textMessage.trim()
-                ? {
-                    scale: 0.95,
-                  }
-                : undefined
-            }
-            className="p-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded-xl shadow-md transition-all flex items-center justify-center cursor-pointer disabled:cursor-not-allowed"
+            whileHover={textMessage.trim() ? { scale: 1.05 } : undefined}
+            whileTap={textMessage.trim() ? { scale: 0.95 } : undefined}
+            className="flex cursor-pointer items-center justify-center rounded-xl bg-indigo-600 p-2.5 text-white shadow-md transition-all hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600"
           >
             <Send size={16} />
           </motion.button>
         </form>
       </motion.div>
-      {/* ================================================= */}
-      {/* FILE UPLOAD MODAL */}
-      {/* ================================================= */}
+
+      {/* File upload */}
       <FileUploadModal
-        isOpen={!!uploadModalType}
+        isOpen={uploadModalType !== null}
         onClose={() => setUploadModalType(null)}
-        defaultType={uploadModalType || "FILE"}
+        defaultType={uploadModalType ?? "FILE"}
         onSendFile={handleSendFile}
       />
-      {/* ================================================= */}
-      {/* GROUP MEMBERS */}
-      {/* ================================================= */}
-      {conversation.type === "GROUP" && (
+
+      {/* Group members */}
+      {isGroup && (
         <GroupMembersModal
           isOpen={isMembersModalOpen}
           onClose={() => setIsMembersModalOpen(false)}
@@ -852,16 +777,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           onGroupUpdated={onRefresh}
         />
       )}
-      {/* ================================================= */}
-      {/* Remove chat Model */}
-      {/* ================================================= */}
-      {
-        <RemoveChatModal
-          isOpen={isRemoveModalOpen}
-          onConfirm={handleRemoveChat}
-          onCancel={() => setIsRemoveModalOpen(false)}
-        />
-      }
+
+      {/* Remove conversation */}
+      <RemoveChatModal
+        isOpen={isRemoveModalOpen}
+        onConfirm={handleRemoveChat}
+        onCancel={() => setIsRemoveModalOpen(false)}
+      />
     </motion.div>
   );
 };

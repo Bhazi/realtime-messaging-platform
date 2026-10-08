@@ -23,77 +23,6 @@ export interface ConversationMemberRow {
 
 export class ChatModel {
   /**
-   * Find an existing DIRECT conversation between two specific users
-   */
-  static async findDirectConversation(userId1: string, userId2: string) {
-    const query = `
-      SELECT 
-        c.id, 
-        c.type, 
-        c.name, 
-        c.avatar_url AS "avatarUrl", 
-        c.created_by AS "createdBy", 
-        c.created_at AS "createdAt", 
-        c.updated_at AS "updatedAt"
-      FROM conversations c
-      JOIN conversation_members cm1 ON c.id = cm1.conversation_id
-      JOIN conversation_members cm2 ON c.id = cm2.conversation_id
-      WHERE c.type = 'DIRECT'
-        AND cm1.user_id = $1
-        AND cm2.user_id = $2
-      LIMIT 1;
-    `;
-    const { rows } = await pool.query(query, [userId1, userId2]);
-    return rows[0] || null;
-  }
-
-  /**
-   * Fetch all members belonging to a conversation, joined with User details
-   */
-  static async getMembersByConversationId(
-    conversationId: string,
-  ): Promise<any[]> {
-    const query = `
-      SELECT 
-        cm.conversation_id AS "conversationId",
-        cm.user_id AS "userId",
-        cm.role,
-        cm.joined_at AS "joinedAt",
-        cm.left_at AS "leftAt",
-        cm.hidden_at AS "hiddenAt",
-        json_build_object(
-          'id', u.id,
-          'uid', u.uid,
-          'username', u.username,
-          'email', u.email,
-          'displayName', u.display_name,
-          'avatarUrl', u.avatar_url,
-          'createdAt', u.created_at
-        ) AS "user"
-      FROM conversation_members cm
-      JOIN users u ON cm.user_id = u.id
-      WHERE cm.conversation_id = $1;
-    `;
-    const { rows } = await pool.query(query, [conversationId]);
-    return rows;
-  }
-
-  /**
-   * Unhide a conversation for a specific user if it was hidden
-   */
-  static async unhideAndUnleftForUser(
-    conversationId: string,
-    userId: string,
-  ): Promise<void> {
-    const query = `
-      UPDATE conversation_members
-      SET hidden_at = NULL, left_at = NULL
-      WHERE conversation_id = $1 AND user_id = $2;
-    `;
-    await pool.query(query, [conversationId, userId]);
-  }
-
-  /**
    * Create a new DIRECT conversation and insert both users into conversation_members atomically
    */
   static async createDirectConversation(
@@ -150,154 +79,215 @@ export class ChatModel {
   }
 
   /**
+   * Creates a GROUP conversation and inserts all members within a single transaction.
+   */
+
+  static async createGroupConversation(
+    name: string,
+    createdBy: string,
+    memberUserIds: string[],
+    avatarUrl: string | null = null,
+  ) {
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      const insertConvQuery = `
+      INSERT INTO conversations (
+        type,
+        name,
+        avatar_url,
+        created_by
+      )
+      VALUES ('GROUP', $1, $2, $3)
+      RETURNING
+        id,
+        type,
+        name,
+        avatar_url AS "avatarUrl",
+        created_by AS "createdBy",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt";
+    `;
+
+      const convRes = await client.query(insertConvQuery, [
+        name,
+        avatarUrl,
+        createdBy,
+      ]);
+
+      const conversation = convRes.rows[0];
+
+      const uniqueMemberIds = Array.from(
+        new Set([createdBy, ...memberUserIds]),
+      );
+
+      const memberValues: string[] = [];
+      const queryParams: any[] = [conversation.id];
+
+      uniqueMemberIds.forEach((userId) => {
+        const paramIndex = queryParams.length + 1;
+
+        const role = userId === createdBy ? "OWNER" : "MEMBER";
+
+        memberValues.push(`($1, $${paramIndex}, $${paramIndex + 1})`);
+
+        queryParams.push(userId, role);
+      });
+
+      const insertMembersQuery = `
+      INSERT INTO conversation_members (
+        conversation_id,
+        user_id,
+        role
+      )
+      VALUES ${memberValues.join(", ")}
+      RETURNING
+        conversation_id AS "conversationId",
+        user_id AS "userId",
+        role,
+        joined_at AS "joinedAt",
+        left_at AS "leftAt",
+        hidden_at AS "hiddenAt";
+    `;
+
+      const membersRes = await client.query(insertMembersQuery, queryParams);
+
+      await client.query("COMMIT");
+
+      return {
+        ...conversation,
+        members: membersRes.rows,
+      };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Soft-deletes a message and handles optional attachment cleanup.
+   * Permissions: Original sender OR Group ADMIN/OWNER.
+   */
+  static async deleteMessage(messageId: string, userId: string) {
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      // 1. Fetch message and verify caller's membership & role
+      const checkQuery = `
+        SELECT 
+          m.id,
+          m.sender_id,
+          m.conversation_id,
+          m.deleted_at,
+          m.attachment_id,
+          ma.storage_key,
+          cm.role AS member_role,
+          cm.left_at
+        FROM messages m
+        JOIN conversation_members cm 
+          ON m.conversation_id = cm.conversation_id AND cm.user_id = $2
+        LEFT JOIN message_attachments ma ON m.attachment_id = ma.id
+        WHERE m.id = $1;
+      `;
+      const checkRes = await client.query(checkQuery, [messageId, userId]);
+
+      if (checkRes.rows.length === 0) {
+        throw new Error(
+          "Message not found or you are not a member of this conversation.",
+        );
+      }
+
+      const msg = checkRes.rows[0];
+
+      if (msg.left_at !== null) {
+        throw new Error(
+          "You are no longer an active member of this conversation.",
+        );
+      }
+
+      if (msg.deleted_at !== null) {
+        throw new Error("Message is already deleted.");
+      }
+
+      // 2. Permission check: Original Sender OR Group Admin/Owner
+      const isSender = msg.sender_id === userId;
+      const isAdminOrOwner =
+        msg.member_role === "ADMIN" || msg.member_role === "OWNER";
+
+      if (!isSender && !isAdminOrOwner) {
+        throw new Error("Permission denied to delete this message.");
+      }
+
+      // 3. Soft-delete the message and un-link attachment
+      const updateMessageQuery = `
+        UPDATE messages
+        SET 
+          deleted_at = CURRENT_TIMESTAMP,
+          content = 'This message was deleted',
+          attachment_id = NULL
+        WHERE id = $1
+        RETURNING id, conversation_id, updated_at, deleted_at;
+      `;
+      const updateRes = await client.query(updateMessageQuery, [messageId]);
+
+      // 4. Delete the message attachment record from DB if present
+      if (msg.attachment_id) {
+        await client.query(`DELETE FROM message_attachments WHERE id = $1;`, [
+          msg.attachment_id,
+        ]);
+      }
+
+      await client.query("COMMIT");
+
+      return {
+        deletedMessage: updateRes.rows[0],
+        attachmentStorageKey: msg.storage_key || null, // Returned for object storage cleanup
+      };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Find an existing DIRECT conversation between two specific users
+   */
+  static async findDirectConversation(userId1: string, userId2: string) {
+    const query = `
+      SELECT 
+        c.id, 
+        c.type, 
+        c.name, 
+        c.avatar_url AS "avatarUrl", 
+        c.created_by AS "createdBy", 
+        c.created_at AS "createdAt", 
+        c.updated_at AS "updatedAt"
+      FROM conversations c
+      JOIN conversation_members cm1 ON c.id = cm1.conversation_id
+      JOIN conversation_members cm2 ON c.id = cm2.conversation_id
+      WHERE c.type = 'DIRECT'
+        AND cm1.user_id = $1
+        AND cm2.user_id = $2
+      LIMIT 1;
+    `;
+    const { rows } = await pool.query(query, [userId1, userId2]);
+    return rows[0] || null;
+  }
+
+  /**
    * Fetch all active conversations for a given user, including:
    * - Dynamically derived name & avatar for DIRECT chats (from the other user)
    * - Enriched members list with embedded User objects
    * - The single most recent message (with optional attachment)
    */
-  //   static async getConversationsForUser(userId: string) {
-  //     const query = ` WITH user_conversations AS (
-  //         -- 1. Find all active conversations for the current user
-  //         SELECT cm.conversation_id
-  //         FROM conversation_members AS cm
-  //         WHERE cm.user_id = $1
-  //           AND cm.left_at IS NULL
-  //           AND cm.hidden_at IS NULL
-  //     ),
-
-  //   last_messages AS (
-  //       -- 2. Get the latest non-deleted message per conversation
-  //       SELECT DISTINCT ON (m.conversation_id)
-  //           m.id,
-  //           m.conversation_id AS "conversationId",
-  //           m.sender_id AS "senderId",
-  //           m.type,
-  //           m.content,
-  //           m.created_at AS "createdAt",
-  //           m.updated_at AS "updatedAt",
-  //           CASE
-  //               WHEN ma.id IS NOT NULL THEN json_build_object(
-  //                   'id', ma.id,
-  //                   'storageKey', ma.storage_key,
-  //                   'filename', ma.filename,
-  //                   'mimeType', ma.mime_type,
-  //                   'size', ma.size,
-  //                   'url', ma.url
-  //               )
-  //             ELSE NULL
-  //           END AS attachment
-  //       FROM messages AS m
-  //       LEFT JOIN message_attachments AS ma
-  //           ON ma.id = m.attachment_id
-  //       WHERE m.conversation_id IN (
-  //           SELECT conversation_id
-  //           FROM user_conversations
-  //       )
-  //         AND m.deleted_at IS NULL
-  //       ORDER BY
-  //           m.conversation_id,
-  //           m.created_at DESC,
-  //           m.id DESC
-  //   ),
-
-  //   conversation_members_data AS (
-  //       -- 3. Get active members with their user data
-  //       SELECT
-  //           cm.conversation_id,
-  //           json_agg(
-  //               json_build_object(
-  //                   'conversationId', cm.conversation_id,
-  //                   'userId', cm.user_id,
-  //                   'role', cm.role,
-  //                   'joinedAt', cm.joined_at,
-  //                   'leftAt', cm.left_at,
-  //                   'hiddenAt', cm.hidden_at,
-  //                   'user', json_build_object(
-  //                       'id', u.id,
-  //                       'uid', u.uid,
-  //                       'username', u.username,
-  //                       'email', u.email,
-  //                       'displayName', u.display_name,
-  //                       'avatarUrl', u.avatar_url,
-  //                       'createdAt', u.created_at
-  //                   )
-  //               )
-  //               ORDER BY cm.joined_at ASC
-  //           ) AS members
-  //       FROM conversation_members AS cm
-  //       INNER JOIN users AS u
-  //           ON u.id = cm.user_id
-  //       WHERE cm.conversation_id IN (
-  //           SELECT conversation_id
-  //           FROM user_conversations
-  //       )
-  //         AND cm.left_at IS NULL
-  //         AND cm.hidden_at IS NULL
-  //       GROUP BY cm.conversation_id
-  //   )
-
-  // -- 4. Combine conversations with members and latest message
-  //     SELECT
-  //         c.id,
-  //         c.type,
-
-  //         CASE
-  //             WHEN c.type = 'DIRECT' THEN (
-  //                 SELECT u2.display_name
-  //                 FROM conversation_members AS cm2
-  //                 INNER JOIN users AS u2
-  //                     ON u2.id = cm2.user_id
-  //                 WHERE cm2.conversation_id = c.id
-  //                   AND cm2.user_id != $1
-  //                 ORDER BY cm2.joined_at ASC
-  //                 LIMIT 1
-  //             )
-  //             ELSE c.name
-  //         END AS name,
-
-  //         CASE
-  //             WHEN c.type = 'DIRECT' THEN (
-  //                 SELECT u2.avatar_url
-  //                 FROM conversation_members AS cm2
-  //                 INNER JOIN users AS u2
-  //                     ON u2.id = cm2.user_id
-  //                 WHERE cm2.conversation_id = c.id
-  //                   AND cm2.user_id != $1
-  //                 ORDER BY cm2.joined_at ASC
-  //                 LIMIT 1
-  //             )
-  //             ELSE c.avatar_url
-  //         END AS "avatarUrl",
-
-  //         c.created_by AS "createdBy",
-  //         c.created_at AS "createdAt",
-  //         c.updated_at AS "updatedAt",
-
-  //         COALESCE(
-  //             cmd.members,
-  //             '[]'::json
-  //         ) AS members,
-
-  //         to_jsonb(lm) - 'conversationId' AS "lastMessage"
-
-  //     FROM conversations AS c
-
-  //     INNER JOIN user_conversations AS uc
-  //         ON uc.conversation_id = c.id
-
-  //     LEFT JOIN conversation_members_data AS cmd
-  //         ON cmd.conversation_id = c.id
-
-  //     LEFT JOIN last_messages AS lm
-  //         ON lm."conversationId" = c.id
-
-  //     ORDER BY
-  //         COALESCE(lm."createdAt", c.created_at) DESC;
-  //       `;
-
-  //     const { rows } = await pool.query(query, [userId]);
-  //     return rows;
-  //   }
 
   static async getConversationsForUser(userId: string) {
     const query = `WITH user_conversations AS (
@@ -462,195 +452,36 @@ export class ChatModel {
   }
 
   /**
-   * Creates a GROUP conversation and inserts all members within a single transaction.
+   * Fetch all members belonging to a conversation, joined with User details
    */
-
-  static async createGroupConversation(
-    name: string,
-    createdBy: string,
-    memberUserIds: string[],
-    avatarUrl: string | null = null,
-  ) {
-    const client = await pool.connect();
-
-    try {
-      await client.query("BEGIN");
-
-      const insertConvQuery = `
-      INSERT INTO conversations (
-        type,
-        name,
-        avatar_url,
-        created_by
-      )
-      VALUES ('GROUP', $1, $2, $3)
-      RETURNING
-        id,
-        type,
-        name,
-        avatar_url AS "avatarUrl",
-        created_by AS "createdBy",
-        created_at AS "createdAt",
-        updated_at AS "updatedAt";
+  static async getMembersByConversationId(
+    conversationId: string,
+  ): Promise<any[]> {
+    const query = `
+      SELECT 
+        cm.conversation_id AS "conversationId",
+        cm.user_id AS "userId",
+        cm.role,
+        cm.joined_at AS "joinedAt",
+        cm.left_at AS "leftAt",
+        cm.hidden_at AS "hiddenAt",
+        json_build_object(
+          'id', u.id,
+          'uid', u.uid,
+          'username', u.username,
+          'email', u.email,
+          'displayName', u.display_name,
+          'avatarUrl', u.avatar_url,
+          'createdAt', u.created_at
+        ) AS "user"
+      FROM conversation_members cm
+      JOIN users u ON cm.user_id = u.id
+      WHERE cm.conversation_id = $1;
     `;
-
-      const convRes = await client.query(insertConvQuery, [
-        name,
-        avatarUrl,
-        createdBy,
-      ]);
-
-      const conversation = convRes.rows[0];
-
-      const uniqueMemberIds = Array.from(
-        new Set([createdBy, ...memberUserIds]),
-      );
-
-      const memberValues: string[] = [];
-      const queryParams: any[] = [conversation.id];
-
-      uniqueMemberIds.forEach((userId) => {
-        const paramIndex = queryParams.length + 1;
-
-        const role = userId === createdBy ? "OWNER" : "MEMBER";
-
-        memberValues.push(`($1, $${paramIndex}, $${paramIndex + 1})`);
-
-        queryParams.push(userId, role);
-      });
-
-      const insertMembersQuery = `
-      INSERT INTO conversation_members (
-        conversation_id,
-        user_id,
-        role
-      )
-      VALUES ${memberValues.join(", ")}
-      RETURNING
-        conversation_id AS "conversationId",
-        user_id AS "userId",
-        role,
-        joined_at AS "joinedAt",
-        left_at AS "leftAt",
-        hidden_at AS "hiddenAt";
-    `;
-
-      const membersRes = await client.query(insertMembersQuery, queryParams);
-
-      await client.query("COMMIT");
-
-      return {
-        ...conversation,
-        members: membersRes.rows,
-      };
-    } catch (error) {
-      await client.query("ROLLBACK");
-      throw error;
-    } finally {
-      client.release();
-    }
+    const { rows } = await pool.query(query, [conversationId]);
+    return rows;
   }
 
-  // // newly added
-  // static async getMessages(
-  //   conversationId: string,
-  //   limit: number,
-  //   cursor?: {
-  //     createdAt: string;
-  //     id: string;
-  //   },
-  // ) {
-  //   const query = `
-  //   SELECT
-  //     m.id,
-  //     m.conversation_id AS "conversationId",
-  //     m.sender_id AS "senderId",
-  //     m.type,
-  //     m.content,
-  //     m.created_at AS "createdAt",
-  //     m.updated_at AS "updatedAt",
-
-  //     CASE
-  //       WHEN ma.id IS NOT NULL THEN json_build_object(
-  //         'id', ma.id,
-  //         'storageKey', ma.storage_key,
-  //         'filename', ma.filename,
-  //         'mimeType', ma.mime_type,
-  //         'size', ma.size,
-  //         'url', ma.url
-  //       )
-  //       ELSE NULL
-  //     END AS attachment,
-
-  //     json_build_object(
-  //       'id', u.id,
-  //       'uid', u.uid,
-  //       'username', u.username,
-  //       'displayName', u.display_name,
-  //       'avatarUrl', u.avatar_url
-  //     ) AS sender
-
-  //   FROM messages m
-
-  //   JOIN users u
-  //     ON m.sender_id = u.id
-
-  //   LEFT JOIN message_attachments ma
-  //     ON m.attachment_id = ma.id
-
-  //   WHERE
-  //     m.conversation_id = $1
-  //     AND m.deleted_at IS NULL
-
-  //     ${
-  //       cursor
-  //         ? `AND (
-  //             m.created_at < $2
-  //             OR (
-  //               m.created_at = $2
-  //               AND m.id < $3
-  //             )
-  //           )`
-  //         : ""
-  //     }
-
-  //   ORDER BY m.created_at DESC, m.id DESC
-
-  //   LIMIT $${cursor ? 4 : 2};
-  // `;
-
-  //   const values = cursor
-  //     ? [conversationId, cursor.createdAt, cursor.id, limit + 1]
-  //     : [conversationId, limit + 1];
-
-  //   console.log(values, limit, "limit", cursor, "curson");
-
-  //   const { rows } = await pool.query(query, values);
-
-  //   console.log(rows, "fromt he rows of chat model get messages");
-
-  //   const hasMore = rows.length > limit;
-
-  //   const messages = rows.slice(0, limit);
-
-  //   const lastMessage = messages[messages.length - 1];
-
-  //   const nextCursor =
-  //     hasMore && lastMessage
-  //       ? {
-  //           createdAt: lastMessage.createdAt,
-  //           id: lastMessage.id,
-  //         }
-  //       : null;
-
-  //   return {
-  //     messages: messages.reverse(),
-  //     nextCursor,
-  //     hasMore,
-  //   };
-  // }
-
-  // newly added
   static async getMessages(
     conversationId: string,
     limit: number,
@@ -688,7 +519,28 @@ export class ChatModel {
         'username', u.username,
         'displayName', u.display_name,
         'avatarUrl', u.avatar_url
-      ) AS sender
+      ) AS sender,
+
+      COALESCE(
+        (
+          SELECT json_agg(
+            json_build_object(
+              'userId', mr.user_id,
+              'username', ru.username,
+              'displayName', ru.display_name,
+              'avatarUrl', ru.avatar_url,
+              'deliveredAt', mr.delivered_at,
+              'readAt', mr.read_at
+            )
+            ORDER BY mr.delivered_at ASC
+          )
+          FROM message_receipts mr
+          JOIN users ru
+            ON mr.user_id = ru.id
+          WHERE mr.message_id = m.id
+        ),
+        '[]'::json
+      ) AS "receipts"
 
     FROM messages m
 
@@ -792,114 +644,6 @@ export class ChatModel {
     return rows;
   }
 
-  // static async sendMessage(
-  //   conversationId: string,
-  //   senderId: string,
-  //   type: string,
-  //   content?: string,
-  //   attachmentData?: {
-  //     storageKey: string;
-  //     filename: string;
-  //     mimeType: string;
-  //     size: number;
-  //     url: string;
-  //   },
-  // ) {
-  //   const client = await pool.connect();
-
-  //   try {
-  //     await client.query("BEGIN");
-
-  //     let attachmentId: string | null = null;
-
-  //     // 1. Insert file metadata if an attachment exists
-  //     if (attachmentData) {
-  //       const insertAttachmentQuery = `
-  //         INSERT INTO message_attachments (storage_key, filename, mime_type, size, url)
-  //         VALUES ($1, $2, $3, $4, $5)
-  //         RETURNING id;
-  //       `;
-  //       const attRes = await client.query(insertAttachmentQuery, [
-  //         attachmentData.storageKey,
-  //         attachmentData.filename,
-  //         attachmentData.mimeType,
-  //         attachmentData.size,
-  //         attachmentData.url,
-  //       ]);
-  //       attachmentId = attRes.rows[0].id;
-  //     }
-
-  //     // 2. Insert message
-  //     const insertMessageQuery = `
-  //       INSERT INTO messages (conversation_id, sender_id, type, content, attachment_id)
-  //       VALUES ($1, $2, $3, $4, $5)
-  //       RETURNING id;
-  //     `;
-  //     const msgRes = await client.query(insertMessageQuery, [
-  //       conversationId,
-  //       senderId,
-  //       type,
-  //       content || null,
-  //       attachmentId,
-  //     ]);
-  //     const messageId = msgRes.rows[0].id;
-
-  //     // 3. Update conversation activity and unhide conversation
-  //     await client.query(
-  //       `UPDATE conversations SET updated_at = NOW() WHERE id = $1;`,
-  //       [conversationId],
-  //     );
-  //     await client.query(
-  //       `UPDATE conversation_members SET hidden_at = NULL WHERE conversation_id = $1;`,
-  //       [conversationId],
-  //     );
-
-  //     await client.query("COMMIT");
-
-  //     // 4. Return populated message object
-  //     const fetchMessageQuery = `
-  //       SELECT
-  //         m.id,
-  //         m.conversation_id AS "conversationId",
-  //         m.sender_id AS "senderId",
-  //         m.type,
-  //         m.content,
-  //         m.created_at AS "createdAt",
-  //         m.updated_at AS "updatedAt",
-  //         CASE
-  //           WHEN ma.id IS NOT NULL THEN json_build_object(
-  //             'id', ma.id,
-  //             'storageKey', ma.storage_key,
-  //             'filename', ma.filename,
-  //             'mimeType', ma.mime_type,
-  //             'size', ma.size,
-  //             'url', ma.url
-  //           )
-  //           ELSE NULL
-  //         END AS attachment,
-  //         json_build_object(
-  //           'id', u.id,
-  //           'uid', u.uid,
-  //           'username', u.username,
-  //           'displayName', u.display_name,
-  //           'avatarUrl', u.avatar_url
-  //         ) AS sender
-  //       FROM messages m
-  //       JOIN users u ON m.sender_id = u.id
-  //       LEFT JOIN message_attachments ma ON m.attachment_id = ma.id
-  //       WHERE m.id = $1;
-  //     `;
-
-  //     const { rows } = await pool.query(fetchMessageQuery, [messageId]);
-  //     return rows[0];
-  //   } catch (error) {
-  //     await client.query("ROLLBACK");
-  //     throw error;
-  //   } finally {
-  //     client.release();
-  //   }
-  // }
-
   static async sendMessage(
     conversationId: string,
     senderId: string,
@@ -914,8 +658,6 @@ export class ChatModel {
     },
   ) {
     const client = await pool.connect();
-
-    console.log(conversationId);
 
     try {
       await client.query("BEGIN");
@@ -1102,181 +844,18 @@ export class ChatModel {
     }
   }
 
-  // static async getAllMessages() {
-  //   const query = `
-  //     SELECT
-  //       m.id,
-  //       m.conversation_id AS "conversationId",
-  //       m.sender_id AS "senderId",
-  //       m.type,
-  //       m.content,
-  //       m.created_at AS "createdAt",
-  //       m.updated_at AS "updatedAt",
-  //       CASE
-  //         WHEN ma.id IS NOT NULL THEN json_build_object(
-  //           'id', ma.id,
-  //           'storageKey', ma.storage_key,
-  //           'filename', ma.filename,
-  //           'mimeType', ma.mime_type,
-  //           'size', ma.size,
-  //           'url', ma.url
-  //         )
-  //         ELSE NULL
-  //       END AS attachment,
-  //       json_build_object(
-  //         'id', u.id,
-  //         'uid', u.uid,
-  //         'username', u.username,
-  //         'displayName', u.display_name,
-  //         'avatarUrl', u.avatar_url
-  //       ) AS sender
-  //     FROM messages m
-  //     JOIN users u ON m.sender_id = u.id
-  //     LEFT JOIN message_attachments ma ON m.attachment_id = ma.id
-  //     WHERE m.deleted_at IS NULL
-  //     ORDER BY m.created_at ASC;
-  //   `;
-
-  //   const { rows } = await pool.query(query);
-  //   return rows;
-  // }
-  static async getAllMessages() {
-    const query = `
-    SELECT
-      m.id,
-      m.conversation_id AS "conversationId",
-      m.sender_id AS "senderId",
-      m.seq AS "seq",
-      m.type,
-      m.content,
-      m.created_at AS "createdAt",
-      m.updated_at AS "updatedAt",
-
-      CASE
-        WHEN ma.id IS NOT NULL THEN
-          json_build_object(
-            'id', ma.id,
-            'storageKey', ma.storage_key,
-            'filename', ma.filename,
-            'mimeType', ma.mime_type,
-            'size', ma.size,
-            'url', ma.url
-          )
-        ELSE NULL
-      END AS attachment,
-
-      json_build_object(
-        'id', u.id,
-        'uid', u.uid,
-        'username', u.username,
-        'displayName', u.display_name,
-        'avatarUrl', u.avatar_url
-      ) AS sender
-
-    FROM messages m
-
-    JOIN users u
-      ON m.sender_id = u.id
-
-    LEFT JOIN message_attachments ma
-      ON m.attachment_id = ma.id
-
-    WHERE m.deleted_at IS NULL
-
-    ORDER BY m.created_at ASC;
-  `;
-
-    const { rows } = await pool.query(query);
-
-    return rows;
-  }
-
   /**
-   * Soft-deletes a message and handles optional attachment cleanup.
-   * Permissions: Original sender OR Group ADMIN/OWNER.
+   * Unhide a conversation for a specific user if it was hidden
    */
-  static async deleteMessage(messageId: string, userId: string) {
-    const client = await pool.connect();
-
-    try {
-      await client.query("BEGIN");
-
-      // 1. Fetch message and verify caller's membership & role
-      const checkQuery = `
-        SELECT 
-          m.id,
-          m.sender_id,
-          m.conversation_id,
-          m.deleted_at,
-          m.attachment_id,
-          ma.storage_key,
-          cm.role AS member_role,
-          cm.left_at
-        FROM messages m
-        JOIN conversation_members cm 
-          ON m.conversation_id = cm.conversation_id AND cm.user_id = $2
-        LEFT JOIN message_attachments ma ON m.attachment_id = ma.id
-        WHERE m.id = $1;
-      `;
-      const checkRes = await client.query(checkQuery, [messageId, userId]);
-
-      if (checkRes.rows.length === 0) {
-        throw new Error(
-          "Message not found or you are not a member of this conversation.",
-        );
-      }
-
-      const msg = checkRes.rows[0];
-
-      if (msg.left_at !== null) {
-        throw new Error(
-          "You are no longer an active member of this conversation.",
-        );
-      }
-
-      if (msg.deleted_at !== null) {
-        throw new Error("Message is already deleted.");
-      }
-
-      // 2. Permission check: Original Sender OR Group Admin/Owner
-      const isSender = msg.sender_id === userId;
-      const isAdminOrOwner =
-        msg.member_role === "ADMIN" || msg.member_role === "OWNER";
-
-      if (!isSender && !isAdminOrOwner) {
-        throw new Error("Permission denied to delete this message.");
-      }
-
-      // 3. Soft-delete the message and un-link attachment
-      const updateMessageQuery = `
-        UPDATE messages
-        SET 
-          deleted_at = CURRENT_TIMESTAMP,
-          content = 'This message was deleted',
-          attachment_id = NULL
-        WHERE id = $1
-        RETURNING id, conversation_id, updated_at, deleted_at;
-      `;
-      const updateRes = await client.query(updateMessageQuery, [messageId]);
-
-      // 4. Delete the message attachment record from DB if present
-      if (msg.attachment_id) {
-        await client.query(`DELETE FROM message_attachments WHERE id = $1;`, [
-          msg.attachment_id,
-        ]);
-      }
-
-      await client.query("COMMIT");
-
-      return {
-        deletedMessage: updateRes.rows[0],
-        attachmentStorageKey: msg.storage_key || null, // Returned for object storage cleanup
-      };
-    } catch (error) {
-      await client.query("ROLLBACK");
-      throw error;
-    } finally {
-      client.release();
-    }
+  static async unhideAndUnleftForUser(
+    conversationId: string,
+    userId: string,
+  ): Promise<void> {
+    const query = `
+      UPDATE conversation_members
+      SET hidden_at = NULL, left_at = NULL
+      WHERE conversation_id = $1 AND user_id = $2;
+    `;
+    await pool.query(query, [conversationId, userId]);
   }
 }

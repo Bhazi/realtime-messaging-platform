@@ -1,20 +1,27 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { MessageSquare, ArrowLeft } from "lucide-react";
+
 import { Sidebar } from "../chat/components/Sidebar";
 import { ChatArea } from "../chat/components/ChatArea";
 import { SettingsView } from "../chat/components/SettingsView";
 import { AddUserDialog } from "../chat/components/AddUserDialog";
 import { CreateGroupDialog } from "../../features/chat/components/CreateGroupDialog";
-import { User, Conversation } from "../../types/types";
-import { MessageSquare, ArrowLeft } from "lucide-react";
-import { chatApi } from "../../api/chat.api";
 
+import { chatApi } from "../../api/chat.api";
 import { socket } from "../../lib/socket";
+
+import { User, Conversation, Message } from "../../types/types";
 
 interface MessengerLayoutProps {
   currentUser: User;
   onLogout: () => void;
   onCurrentUserChange: (user: User) => void;
+}
+
+interface NewMessageEvent {
+  conversationId: string;
+  message: Message;
 }
 
 export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
@@ -47,9 +54,9 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
         const active = result.find((c) => c.id === conversationId);
 
         setActiveConversation(active);
-      } else {
-        // setActiveConversation(result[0] ?? null);
       }
+
+      return result;
     } catch (error) {
       console.error("Failed to load conversations:", error);
       return [];
@@ -64,7 +71,7 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
   useEffect(() => {
     if (!socket) return;
 
-    const handleNewMessage = ({ conversationId, message }) => {
+    const handleNewMessage = ({ conversationId, message }: NewMessageEvent) => {
       setConversations((previous) => {
         const conversation = previous.find(
           (conversation) => conversation.id === conversationId,
@@ -99,28 +106,29 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
   useEffect(() => {
     if (!socket) return;
 
-    const handleConversationMessage = ({ conversationId, message }) => {
+    const handleConversationMessage = ({
+      conversationId,
+      message,
+    }: NewMessageEvent) => {
+      // This user is online but NOT viewing this conversation.
+      socket.emit("message:delivered", {
+        messageId: message.id,
+        conversationId,
+      });
+
+      // Update sidebar unread count
       setConversations((previous) => {
-        const conversation = previous.find(
-          (conversation) => conversation.id === conversationId,
-        );
+        return previous.map((conversation) => {
+          if (conversation.id !== conversationId) {
+            return conversation;
+          }
 
-        if (!conversation) {
-          return previous;
-        }
-
-        const updatedConversation = {
-          ...conversation,
-          lastMessage: message,
-          unreadCount: conversation.unreadCount + 1,
-        };
-
-        return [
-          updatedConversation,
-          ...previous.filter(
-            (conversation) => conversation.id !== conversationId,
-          ),
-        ];
+          return {
+            ...conversation,
+            lastMessage: message,
+            unreadCount: conversation.unreadCount + 1,
+          };
+        });
       });
     };
 
@@ -135,12 +143,8 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
     setRefreshKey((prev) => prev + 1);
   };
 
-  useEffect(() => {
-    console.log("rendered");
-  }, [conversations]);
-
   const handleSelectConversation = (conversationId: string) => {
-    // // Select conversation
+    // Select conversation
     const conversation = conversations.find(
       (conversation) => conversation.id === conversationId,
     );
@@ -177,8 +181,6 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
     handleRefresh();
     navigate(`/app/chat/${group.id}`);
   };
-
-  console.log("called the messenger layout");
 
   return (
     <div className="h-screen w-screen bg-black text-zinc-100 flex overflow-hidden font-sans">

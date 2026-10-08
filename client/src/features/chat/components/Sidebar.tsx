@@ -1,11 +1,11 @@
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import { Settings, UserPlus, FolderPlus, LogOut } from "lucide-react";
-import { Conversation, User } from "../../../types/types";
+
 import { LumaLogo } from "../../../components/LumaLogo";
 
-import { motion } from "framer-motion";
-
+import { Conversation, User } from "../../../types/types";
 interface SidebarProps {
   currentUser: User;
   conversations: Conversation[];

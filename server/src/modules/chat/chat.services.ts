@@ -1,6 +1,13 @@
 import { ChatModel } from "../../models/chat.model.js";
 import { UserModel } from "../../models/user.model.js";
 
+interface AttachmentPayload {
+  storageKey: string;
+  filename: string;
+  mimeType: string;
+  size: number; // in bytes
+  url: string;
+}
 export class ChatService {
   static async createDirectConversation(
     currentUserId: string,
@@ -126,10 +133,6 @@ export class ChatService {
       content,
       attachmentData,
     );
-  }
-
-  static async getAllMessages() {
-    return await ChatModel.getAllMessages();
   }
 
   static async getMessages(

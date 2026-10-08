@@ -1,6 +1,7 @@
 import React from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { X, Download, FileText } from "lucide-react";
+
 import { MessageAttachment, MessageType } from "../../../types/types";
 
 interface MediaViewerModalProps {

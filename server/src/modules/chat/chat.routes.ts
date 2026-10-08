@@ -36,9 +36,6 @@ router.get(
 // Endpoint accepting JSON body { conversationId: "..." }
 router.post("/messages", authMiddleware, ChatController.getMessages);
 
-// GET endpoint with no required parameters or body
-router.get("/messages/all", authMiddleware, ChatController.getAllMessages);
-
 // Send message endpoint
 router.post(
   "/send",

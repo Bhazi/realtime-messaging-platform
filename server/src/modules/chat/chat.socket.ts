@@ -115,19 +115,20 @@ export function initializeChatSocket(socketServer: Server, serverId: string) {
     // READ MESSAGE
     // ------------------------------------------------
 
-    socket.on("conversation:read", async (data) => {
-      try {
-        const { conversationId, lastReadSeq } = data;
+    socket.on(
+      "conversation:read_up_to",
+      async ({ conversationId, lastReadSeq }) => {
+        try {
+          if (!conversationId || lastReadSeq == null) {
+            return;
+          }
 
-        if (!conversationId || lastReadSeq == null) {
-          return;
+          await UserModel.setLastReadSeq(conversationId, lastReadSeq, userId);
+        } catch (error) {
+          console.error("Failed to update last read seq:", error);
         }
-
-        await UserModel.setLastReadSeq(conversationId, lastReadSeq, userId);
-      } catch (error) {
-        console.error("Failed to update last read seq:", error);
-      }
-    });
+      },
+    );
 
     // ------------------------------------------------
     // LEAVE CONVERSATION
@@ -151,13 +152,43 @@ export function initializeChatSocket(socketServer: Server, serverId: string) {
       }
     });
 
+    socket.on("message:delivered", async ({ messageId, conversationId }) => {
+      const result = await UserModel.markDelivered(messageId, userId);
+
+      if (!result) return;
+
+      if (!io) {
+        return;
+      }
+
+      io.to(`user:${userId}`).emit("message:delivered", {
+        messageId,
+        conversationId,
+        receipt: result,
+      });
+    });
+
+    socket.on("message:read", async ({ messageId, conversationId }) => {
+      const result = await UserModel.markRead(messageId, userId);
+
+      if (!result) return;
+
+      if (!io) {
+        return;
+      }
+
+      io.to(`user:${userId}`).emit("message:read", {
+        messageId,
+        conversationId,
+        receipt: result,
+      });
+    });
+
     // ------------------------------------------------
     // DISCONNECT
     // ------------------------------------------------
 
     socket.on("disconnect", async () => {
-      console.log("called the disconnect thing");
-
       try {
         // Remove user from every conversation
         // this socket was viewing.
