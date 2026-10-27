@@ -467,7 +467,7 @@ export const ChatArea = ({
     }
 
     try {
-      await chatApi.sendMessage(conversation.id, currentUser.id, "TEXT", {
+      await chatApi.sendMessage(conversation.id, "TEXT", {
         content,
       });
 
@@ -490,7 +490,7 @@ export const ChatArea = ({
     caption?: string,
   ) => {
     try {
-      await chatApi.sendMessage(conversation.id, currentUser.id, type, {
+      await chatApi.sendMessage(conversation.id, type, {
         content: caption,
         file,
       });
@@ -509,7 +509,7 @@ export const ChatArea = ({
 
   const handleDeleteMessage = async (messageId: string) => {
     try {
-      await chatApi.deleteMessage(messageId, currentUser.id);
+      await chatApi.deleteMessage(messageId);
 
       onRefresh();
 
@@ -535,9 +535,9 @@ export const ChatArea = ({
   const handleRemoveChat = async () => {
     try {
       if (isGroup) {
-        await userApi.deleteGroupConversation(conversation.id, currentUser.id);
+        await userApi.deleteGroupConversation(conversation.id);
       } else {
-        await userApi.deleteDirectConversation(conversation.id, currentUser.id);
+        await userApi.deleteDirectConversation(conversation.id);
       }
 
       onRefresh();

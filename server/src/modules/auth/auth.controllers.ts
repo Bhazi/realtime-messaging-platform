@@ -21,17 +21,10 @@ export class AuthController {
     try {
       const { username, email, displayName, password } = req.body;
 
-      if (!username || !email || !displayName || !password) {
-        res.status(400).json({
-          error: "All fields are required.",
-        });
-        return;
-      }
-
       const result = await AuthService.registerUser({
-        username: username.trim().toLowerCase(),
-        email: email.trim().toLowerCase(),
-        displayName: displayName.trim(),
+        username,
+        email,
+        displayName,
         password,
       });
 
@@ -60,16 +53,7 @@ export class AuthController {
     try {
       const { identifier, password } = req.body;
 
-      if (!identifier || !password) {
-        res.status(400).json({
-          error: "Please enter your username/email and password.",
-        });
-        return;
-      }
-
-      const cleanIdentifier = identifier.trim().toLowerCase();
-
-      const result = await AuthService.loginUser(cleanIdentifier, password);
+      const result = await AuthService.loginUser(identifier, password);
 
       res
         .cookie(ACCESS_COOKIE_NAME, result.accessToken, {

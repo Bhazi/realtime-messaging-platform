@@ -41,11 +41,7 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
     if (!newUidInput.trim()) return;
 
     try {
-      await userApi.addUserToGroup(
-        conversation.id,
-        currentUserId,
-        newUidInput.trim(),
-      );
+      await userApi.addUserToGroup(conversation.id, newUidInput.trim());
       setSuccessMsg(`User successfully added to ${conversation.name}!`);
       setNewUidInput("");
       onGroupUpdated();
@@ -59,11 +55,7 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
     setSuccessMsg("");
 
     try {
-      await userApi.removeUserFromGroup(
-        conversation.id,
-        currentUserId,
-        targetUserId,
-      );
+      await userApi.removeUserFromGroup(conversation.id, targetUserId);
       setSuccessMsg("Member removed from group.");
       onGroupUpdated();
     } catch (err: any) {
@@ -81,7 +73,6 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
     try {
       await userApi.updateGroupMemberRole(
         conversation.id,
-        currentUserId,
         targetUserId,
         newRole,
       );

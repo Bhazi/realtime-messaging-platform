@@ -72,3 +72,8 @@ export interface AuthState {
   user: User | null;
   token: string | null;
 }
+
+export type UpdateUserProfileInput = {
+  displayName?: string;
+  username?: string;
+};

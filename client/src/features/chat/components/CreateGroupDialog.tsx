@@ -100,7 +100,6 @@ export const CreateGroupDialog: React.FC<CreateGroupDialogProps> = ({
 
     const formData = new FormData();
 
-    formData.append("userId", currentUserId);
     formData.append("groupName", groupName);
 
     // Convert array to JSON string

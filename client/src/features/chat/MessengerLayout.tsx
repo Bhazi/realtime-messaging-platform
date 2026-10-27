@@ -46,7 +46,7 @@ export const MessengerLayout: React.FC<MessengerLayoutProps> = ({
 
   const loadConversations = async () => {
     try {
-      const result = await chatApi.getConversations(currentUser.id);
+      const result = await chatApi.getConversations();
 
       setConversations(result);
 
