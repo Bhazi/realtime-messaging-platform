@@ -1,7 +1,15 @@
 import { apiFetch } from "./apiClient";
 
+import {
+  SignupPayload,
+  SignupResponse,
+  LoginPayload,
+  LoginResponse,
+  LogoutResponse,
+} from "../types/types";
+
 export const authApi = {
-  login: async (payload: { identifier: string; password: string }) => {
+  login: async (payload: LoginPayload): Promise<LoginResponse> => {
     const response = await fetch("http://localhost:5000/api/v1/auth/login", {
       method: "POST",
       credentials: "include",
@@ -12,25 +20,29 @@ export const authApi = {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.error || "Failed to log in.");
+      throw new Error(
+        (data as LoginResponse & { error?: string }).error ||
+          "Failed to log in.",
+      );
     }
+
     return data;
   },
 
-  logout: async () => {
-    await apiFetch("/auth/logout", {
+  logout: async (): Promise<LogoutResponse> => {
+    const response = await apiFetch("/auth/logout", {
       method: "POST",
       credentials: "include",
-      headers: { "Content-type": "application/json" },
     });
+
+    if (!response.ok) {
+      throw new Error("Failed to log out.");
+    }
+
+    return response.json();
   },
 
-  signup: async (payload: {
-    username: string;
-    email: string;
-    displayName: string;
-    password: string;
-  }) => {
+  signup: async (payload: SignupPayload): Promise<SignupResponse> => {
     const response = await fetch("http://localhost:5000/api/v1/auth/signup", {
       method: "POST",
       credentials: "include",
@@ -39,6 +51,7 @@ export const authApi = {
     });
 
     const data = await response.json();
+
     if (!response.ok) {
       throw new Error(data.error || "Failed to sign up.");
     }

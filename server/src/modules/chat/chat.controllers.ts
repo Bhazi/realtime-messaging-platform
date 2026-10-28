@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { ChatService } from "./chat.services.js";
 import { emitNewMessage } from "./chat.socket.js";
 
+import { messageCursorSchema } from "./chat.schema.js";
+
 export class ChatController {
   static async createDirectConversation(
     req: Request,
@@ -127,9 +129,18 @@ export class ChatController {
 
       if (cursorParam) {
         try {
-          cursor = JSON.parse(
+          const decoded: unknown = JSON.parse(
             Buffer.from(cursorParam, "base64").toString("utf8"),
           );
+
+          const parsed = messageCursorSchema.safeParse(decoded);
+
+          if (!parsed.success) {
+            res.status(400).json({ error: "Invalid cursor." });
+            return;
+          }
+
+          cursor = parsed.data;
         } catch {
           res.status(400).json({
             error: "Invalid cursor.",

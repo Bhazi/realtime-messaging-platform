@@ -42,11 +42,14 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
 
     try {
       await userApi.addUserToGroup(conversation.id, newUidInput.trim());
+
       setSuccessMsg(`User successfully added to ${conversation.name}!`);
       setNewUidInput("");
       onGroupUpdated();
-    } catch (err: any) {
-      setErrorMsg(err.message || "Failed to add user to group.");
+    } catch (err: unknown) {
+      setErrorMsg(
+        err instanceof Error ? err.message : "Failed to add user to group.",
+      );
     }
   };
 

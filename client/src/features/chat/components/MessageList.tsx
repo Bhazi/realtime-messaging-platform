@@ -152,11 +152,7 @@ export const MessageList = ({
   const readMessageIdsRef = useRef<Set<string>>(new Set());
   const observerRef = useRef<IntersectionObserver | null>(null);
 
-  /*
-   * =====================================================
-   * RESET WHEN CONVERSATION CHANGES
-   * =====================================================
-   */
+  // RESET WHEN CONVERSATION CHANGES
 
   useEffect(() => {
     isInitialLoadRef.current = true;
@@ -173,11 +169,7 @@ export const MessageList = ({
     setVisibleDate(null);
   }, [conversationId]);
 
-  /*
-   * =====================================================
-   * INITIAL LOAD / NEW MESSAGE SCROLLING
-   * =====================================================
-   */
+  // INITIAL LOAD / NEW MESSAGE SCROLLING
 
   useEffect(() => {
     if (messages.length === 0) {
@@ -227,11 +219,7 @@ export const MessageList = ({
     previousMessageCountRef.current = messages.length;
   }, [messages, shouldScrollToBottomRef]);
 
-  /*
-   * =====================================================
-   * RESTORE SCROLL AFTER PREPENDING
-   * =====================================================
-   */
+  // RESTORE SCROLL AFTER PREPENDING
 
   useLayoutEffect(() => {
     if (!loadingOlderMessagesRef.current) {
@@ -262,11 +250,7 @@ export const MessageList = ({
     previousMessageCountRef.current = messages.length;
   }, [messages]);
 
-  /*
-   * =====================================================
-   * LOAD OLDER MESSAGES
-   * =====================================================
-   */
+  // LOAD OLDER MESSAGES
 
   const handleLoadOlderMessages = async () => {
     const container = scrollContainerRef.current;
@@ -298,11 +282,7 @@ export const MessageList = ({
     }
   };
 
-  /*
-   * =====================================================
-   * INFINITE SCROLL
-   * =====================================================
-   */
+  // INFINITE SCROLL
 
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -335,11 +315,7 @@ export const MessageList = ({
     };
   }, [hasMoreMessages, isLoadingOlderMessages, onLoadOlderMessages]);
 
-  /*
-   * =====================================================
-   * STICKY MESSAGE DATE
-   * =====================================================
-   */
+  // STICKY MESSAGE DATE
 
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -387,11 +363,7 @@ export const MessageList = ({
     };
   }, [messages]);
 
-  /*
-   * =====================================================
-   * MESSAGE READ OBSERVER
-   * =====================================================
-   */
+  // MESSAGE READ OBSERVER
 
   useEffect(() => {
     observerRef.current?.disconnect();
@@ -451,11 +423,7 @@ export const MessageList = ({
     };
   }, [conversationId, currentUserId]);
 
-  /*
-   * =====================================================
-   * RENDER
-   * =====================================================
-   */
+  // RENDER
 
   return (
     <motion.div

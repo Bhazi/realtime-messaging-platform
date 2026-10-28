@@ -1,4 +1,11 @@
-import { Conversation, Message, MessageType } from "../types/types";
+import {
+  Conversation,
+  Message,
+  MessageType,
+  MessageCursor,
+  GetMessagesResponse,
+} from "../types/types";
+
 import { apiFetch } from "./apiClient";
 
 export const chatApi = {
@@ -57,7 +64,6 @@ export const chatApi = {
   deleteMessage: async (messageId: string): Promise<boolean> => {
     const response = await apiFetch(`/chat/messages/${messageId}`, {
       method: "DELETE",
-      headers: { "Content-Type": "application/json" },
     });
 
     if (!response.ok) {
@@ -89,7 +95,7 @@ export const chatApi = {
       limit?: number;
       cursor?: string | null;
     },
-  ) => {
+  ): Promise<GetMessagesResponse> => {
     const limit = options?.limit ?? 50;
 
     const params = new URLSearchParams();
@@ -104,9 +110,6 @@ export const chatApi = {
       `/chat/conversations/${conversationId}/messages?${params.toString()}`,
       {
         method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
       },
     );
 
@@ -136,7 +139,6 @@ export const chatApi = {
     if (data.file) {
       formData.append("file", data.file);
     }
-    console.log("reached here");
 
     const response = await apiFetch(
       `/chat/conversations/${conversationId}/messages`,

@@ -50,7 +50,6 @@ export const userApi = {
   deleteGroupConversation: async (conversationId: string): Promise<void> => {
     const response = await apiFetch(`/users/group/${conversationId}`, {
       method: "DELETE",
-      headers: { "Content-Type": "application/json" },
     });
 
     if (!response.ok) {
@@ -64,7 +63,6 @@ export const userApi = {
   deleteDirectConversation: async (conversationId: string): Promise<void> => {
     const response = await apiFetch(`/users/direct/${conversationId}`, {
       method: "DELETE",
-      headers: { "Content-Type": "application/json" },
     });
 
     if (!response.ok) {
@@ -108,7 +106,6 @@ export const userApi = {
     try {
       const response = await apiFetch(`/user/id/${id}`, {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
       });
 
       if (response.status === 404) return undefined;
@@ -126,7 +123,6 @@ export const userApi = {
     try {
       const response = await apiFetch(`/users/uid/${uid}`, {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
       });
 
       if (response.status === 404) return undefined;
@@ -145,7 +141,6 @@ export const userApi = {
       const result = await apiFetch("/users/me", {
         method: "GET",
         credentials: "include",
-        headers: { "Content-type": "application/json" },
       });
 
       const data = await result.json();
@@ -163,7 +158,6 @@ export const userApi = {
       `/users/groups/${conversationId}/members/${targetUserId}`,
       {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
       },
     );
 
@@ -209,28 +203,6 @@ export const userApi = {
       throw new Error(errorData.error || "Failed to update member role.");
     }
   },
-
-  // updateUserProfile: async (updates: Partial<User>): Promise<User> => {
-  //   const response = await apiFetch("/users/profile/update", {
-  //     method: "POST",
-  //     headers: {
-  //       "Content-Type": "application/json",
-  //     },
-  //     body: JSON.stringify({
-  //       updates,
-  //     }),
-  //   });
-
-  //   if (!response.ok) {
-  //     const errorData = await response.json();
-  //     throw new Error(errorData.error || "Failed to update profile");
-  //   }
-
-  //   const result = await response.json();
-  //   const updatedUser: User = result.user as User;
-
-  //   return updatedUser;
-  // },
 
   updateUserProfile: async (updates: UpdateUserProfileInput): Promise<User> => {
     const response = await apiFetch("/users/profile/update", {

@@ -41,7 +41,7 @@ export const deleteMessageParamsSchema = z.object({
 });
 
 export const getMessagesParamsSchema = z.object({
-  conversationId: z.uuid("Invalid conversatiodId."),
+  conversationId: z.uuid("Invalid conversation Id."),
 });
 
 export const getMessagesQuerySchema = z.object({
@@ -52,8 +52,15 @@ export const getMessagesQuerySchema = z.object({
     .max(100, "Limit cannot exceed 100.")
     .default(50),
 
-  cursor: z.string().nullable().optional(),
+  cursor: z.string().optional(),
 });
+
+export const messageCursorSchema = z
+  .object({
+    createdAt: z.string().datetime(),
+    id: z.uuid(),
+  })
+  .strict();
 
 export const sendMessageParamsSchema = z.object({
   conversationId: z.uuid("Invalid conversatiodId."),

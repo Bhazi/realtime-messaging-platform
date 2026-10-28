@@ -135,7 +135,7 @@ export class ChatService {
     );
   }
 
-  static async getMessages(
+  static getMessages(
     conversationId: string,
     limit: number,
     cursor?: {
@@ -143,7 +143,7 @@ export class ChatService {
       id: string;
     },
   ) {
-    return await ChatModel.getMessages(conversationId, limit, cursor);
+    return ChatModel.getMessages(conversationId, limit, cursor);
   }
 
   static async deleteMessage(
