@@ -37,15 +37,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
       });
 
       // Map backend database user payload to frontend store
-      const foundUser: User = {
-        id: data.user.id,
-        uid: data.user.uid,
-        username: data.user.username,
-        email: data.user.email,
-        displayName: data.user.displayName,
-        avatarUrl: data.user.avatarUrl,
-        createdAt: data.user.createdAt,
-      };
+      const foundUser: User = data.user;
 
       onLoginSuccess(foundUser);
       navigate("/app");

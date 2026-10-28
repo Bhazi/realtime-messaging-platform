@@ -1,4 +1,11 @@
-import { Conversation, Message, MessageType } from "../types/types";
+import {
+  Conversation,
+  Message,
+  MessageType,
+  MessageCursor,
+  GetMessagesResponse,
+} from "../types/types";
+
 import { apiFetch } from "./apiClient";
 
 export const chatApi = {
@@ -54,14 +61,9 @@ export const chatApi = {
     return data.conversation;
   },
 
-  deleteMessage: async (
-    messageId: string,
-    userId: string,
-  ): Promise<boolean> => {
+  deleteMessage: async (messageId: string): Promise<boolean> => {
     const response = await apiFetch(`/chat/messages/${messageId}`, {
       method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId }),
     });
 
     if (!response.ok) {
@@ -73,16 +75,10 @@ export const chatApi = {
     return data.success;
   },
 
-  getConversations: async (userId: string): Promise<Conversation[]> => {
-    const response = await apiFetch(
-      `/chat/conversations?id=${encodeURIComponent(userId)}`,
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      },
-    );
+  getConversations: async (): Promise<Conversation[]> => {
+    const response = await apiFetch(`/chat/conversations`, {
+      method: "GET",
+    });
 
     if (!response.ok) {
       throw new Error("Failed to fetch conversations");
@@ -99,7 +95,7 @@ export const chatApi = {
       limit?: number;
       cursor?: string | null;
     },
-  ) => {
+  ): Promise<GetMessagesResponse> => {
     const limit = options?.limit ?? 50;
 
     const params = new URLSearchParams();
@@ -114,9 +110,6 @@ export const chatApi = {
       `/chat/conversations/${conversationId}/messages?${params.toString()}`,
       {
         method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
       },
     );
 
@@ -129,7 +122,6 @@ export const chatApi = {
 
   sendMessage: async (
     conversationId: string,
-    senderId: string,
     type: MessageType,
     data: {
       content?: string;
@@ -138,7 +130,6 @@ export const chatApi = {
   ): Promise<Message> => {
     const formData = new FormData();
     formData.append("conversationId", conversationId);
-    formData.append("senderId", senderId);
     formData.append("type", type);
 
     if (data.content) {
@@ -149,11 +140,14 @@ export const chatApi = {
       formData.append("file", data.file);
     }
 
-    const response = await apiFetch("/chat/send", {
-      method: "POST",
-      // Note: Do NOT set Content-Type header when sending FormData; browser sets boundary automatically
-      body: formData,
-    });
+    const response = await apiFetch(
+      `/chat/conversations/${conversationId}/messages`,
+      {
+        method: "POST",
+        // Note: Do NOT set Content-Type header when sending FormData; browser sets boundary automatically
+        body: formData,
+      },
+    );
 
     if (!response.ok) {
       const errorData = await response.json();

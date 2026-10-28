@@ -13,7 +13,7 @@ export default interface UserRow {
 declare global {
   namespace Express {
     interface Request {
-      auth?: {
+      auth: {
         userId: string;
         publicUid: string;
       };

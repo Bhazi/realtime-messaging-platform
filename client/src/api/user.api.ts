@@ -1,10 +1,9 @@
-import { User, MemberRole } from "../types/types";
+import { User, MemberRole, UpdateUserProfileInput } from "../types/types";
 import { apiFetch } from "./apiClient";
 
 export const userApi = {
   addUserToGroup: async (
     conversationId: string,
-    currentUserId: string,
     targetUid: string,
   ): Promise<void> => {
     const response = await apiFetch("/users/group/add-user", {
@@ -14,7 +13,6 @@ export const userApi = {
       },
       body: JSON.stringify({
         conversationId,
-        currentUserId,
         targetUid,
       }),
     });
@@ -26,7 +24,6 @@ export const userApi = {
   },
 
   changePassword: async (
-    userId: string,
     oldPassword: string,
     newPassword: string,
   ): Promise<boolean> => {
@@ -36,7 +33,6 @@ export const userApi = {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        userId,
         oldPassword,
         newPassword,
       }),
@@ -51,14 +47,9 @@ export const userApi = {
     return result.success; // Returns true
   },
 
-  deleteGroupConversation: async (
-    conversationId: string,
-    currentUserId: string,
-  ): Promise<void> => {
+  deleteGroupConversation: async (conversationId: string): Promise<void> => {
     const response = await apiFetch(`/users/group/${conversationId}`, {
       method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ currentUserId }),
     });
 
     if (!response.ok) {
@@ -69,14 +60,9 @@ export const userApi = {
     }
   },
 
-  deleteDirectConversation: async (
-    conversationId: string,
-    currentUserId: string,
-  ): Promise<void> => {
+  deleteDirectConversation: async (conversationId: string): Promise<void> => {
     const response = await apiFetch(`/users/direct/${conversationId}`, {
       method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ currentUserId }),
     });
 
     if (!response.ok) {
@@ -120,7 +106,6 @@ export const userApi = {
     try {
       const response = await apiFetch(`/user/id/${id}`, {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
       });
 
       if (response.status === 404) return undefined;
@@ -138,7 +123,6 @@ export const userApi = {
     try {
       const response = await apiFetch(`/users/uid/${uid}`, {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
       });
 
       if (response.status === 404) return undefined;
@@ -157,7 +141,6 @@ export const userApi = {
       const result = await apiFetch("/users/me", {
         method: "GET",
         credentials: "include",
-        headers: { "Content-type": "application/json" },
       });
 
       const data = await result.json();
@@ -169,15 +152,12 @@ export const userApi = {
 
   removeUserFromGroup: async (
     conversationId: string,
-    currentUserId: string,
     targetUserId: string,
   ): Promise<void> => {
     const response = await apiFetch(
       `/users/groups/${conversationId}/members/${targetUserId}`,
       {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentUserId }),
       },
     );
 
@@ -187,7 +167,7 @@ export const userApi = {
     }
   },
 
-  updateAvatar: async (formData: any): Promise<User> => {
+  updateAvatar: async (formData: FormData): Promise<User> => {
     const response = await apiFetch("/users/profile/avatar", {
       method: "POST",
       body: formData,
@@ -195,12 +175,17 @@ export const userApi = {
 
     const result = await response.json();
 
+    if (!response.ok) {
+      throw new Error(
+        result.message ?? result.error ?? "Failed to update avatar.",
+      );
+    }
+
     return result.user;
   },
 
   updateGroupMemberRole: async (
     conversationId: string,
-    currentUserId: string,
     targetUserId: string,
     newRole: MemberRole,
   ): Promise<void> => {
@@ -209,7 +194,7 @@ export const userApi = {
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentUserId, targetUserId, newRole }),
+        body: JSON.stringify({ targetUserId, newRole }),
       },
     );
 
@@ -219,29 +204,21 @@ export const userApi = {
     }
   },
 
-  updateUserProfile: async (
-    userId: string,
-    updates: Partial<User>,
-  ): Promise<User> => {
+  updateUserProfile: async (updates: UpdateUserProfileInput): Promise<User> => {
     const response = await apiFetch("/users/profile/update", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        userId,
-        updates,
-      }),
+      body: JSON.stringify({ updates }),
     });
 
+    const result = await response.json();
+
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || "Failed to update profile");
+      throw new Error(result.error || "Failed to update profile.");
     }
 
-    const result = await response.json();
-    const updatedUser: User = result.user;
-
-    return updatedUser;
+    return result.user as User;
   },
 };

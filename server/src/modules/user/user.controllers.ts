@@ -6,13 +6,9 @@ import { UserService } from "./user.services.js";
 export class UserController {
   static async addUserToGroup(req: Request, res: Response): Promise<void> {
     try {
-      const { conversationId, currentUserId: bodyUserId, targetUid } = req.body;
-      const currentUserId = (req as any).user?.id || bodyUserId;
+      const { conversationId, targetUid } = req.body;
 
-      if (!currentUserId) {
-        res.status(400).json({ error: "currentUserId is required." });
-        return;
-      }
+      const currentUserId = req.auth.userId;
 
       const result = await UserService.addUserToGroup(
         conversationId,
@@ -38,13 +34,9 @@ export class UserController {
 
   static async changePassword(req: Request, res: Response): Promise<void> {
     try {
-      const { userId: bodyUserId, oldPassword, newPassword } = req.body;
-      const userId = (req as any).user?.id || bodyUserId;
+      const { oldPassword, newPassword } = req.body;
 
-      if (!userId) {
-        res.status(400).json({ success: false, error: "userId is required." });
-        return;
-      }
+      const userId = req.auth.userId;
 
       await UserService.changePassword(userId, oldPassword, newPassword);
 
@@ -72,12 +64,8 @@ export class UserController {
   ): Promise<void> {
     try {
       const { conversationId } = req.params as { conversationId: string };
-      const currentUserId = (req as any).user?.id || req.body?.currentUserId;
 
-      if (!currentUserId) {
-        res.status(400).json({ error: "currentUserId is required." });
-        return;
-      }
+      const currentUserId = req.auth.userId;
 
       const result = await UserService.deleteGroupConversation(
         conversationId,
@@ -98,18 +86,19 @@ export class UserController {
     }
   }
 
+  /**
+   * DELETE /api/v1/chat/direct/:conversationId
+   */
   static async deleteDirectConversation(
     req: Request,
     res: Response,
   ): Promise<void> {
     try {
-      const { conversationId } = req.params as { conversationId: string };
-      const currentUserId = (req as any).user?.id || req.body?.currentUserId;
+      const { conversationId } = req.params as {
+        conversationId: string;
+      };
 
-      if (!currentUserId) {
-        res.status(400).json({ error: "currentUserId is required." });
-        return;
-      }
+      const currentUserId = req.auth.userId;
 
       const result = await UserService.deleteDirectConversation(
         conversationId,
@@ -122,11 +111,15 @@ export class UserController {
       });
     } catch (err: any) {
       let statusCode = 400;
-      if (err.message.includes("not found")) statusCode = 404;
 
-      res
-        .status(statusCode)
-        .json({ error: err.message || "Failed to delete direct chat." });
+      if (err.message?.includes("not found")) {
+        statusCode = 404;
+      }
+
+      res.status(statusCode).json({
+        success: false,
+        error: err.message || "Failed to delete direct chat.",
+      });
     }
   }
 
@@ -146,11 +139,6 @@ export class UserController {
   static async getUserById(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params as { id: string };
-
-      if (!id) {
-        res.status(400).json({ error: "User ID parameter is required." });
-        return;
-      }
 
       const user = await UserService.getUserById(id);
 
@@ -174,11 +162,6 @@ export class UserController {
     try {
       const { uid } = req.params as { uid: string };
 
-      if (!uid) {
-        res.status(400).json({ error: "Public UID parameter is required." });
-        return;
-      }
-
       const user = await UserService.getUserByUid(uid);
 
       if (!user) {
@@ -196,7 +179,7 @@ export class UserController {
 
   static async me(req: Request, res: Response): Promise<void> {
     try {
-      const { userId } = req.auth!;
+      const { userId } = req.auth;
 
       const user = await UserService.getUser(userId);
 
@@ -228,10 +211,8 @@ export class UserController {
         conversationId: string;
         targetUserId: string;
       };
-      const { currentUserId } = req.body;
 
-      // Alternatively, extract currentUserId from authenticated request context:
-      // const currentUserId = (req as any).user?.id;
+      const currentUserId = req.auth.userId;
 
       const removedMember = await UserService.removeUserFromGroup(
         conversationId,
@@ -263,14 +244,9 @@ export class UserController {
 
   static async updateAvatar(req: Request, res: Response): Promise<void> {
     try {
-      const file = req.file;
-      const { userId: bodyUserId } = req.body;
-      const userId = (req as any).user?.id || bodyUserId;
+      const userId = req.auth.userId;
 
-      if (!userId) {
-        res.status(400).json({ error: "userId is required in formData." });
-        return;
-      }
+      const file = req.file;
 
       if (!file) {
         res.status(400).json({ error: "No image file provided in request." });
@@ -294,35 +270,6 @@ export class UserController {
     }
   }
 
-  static async updateUserProfile(req: Request, res: Response): Promise<void> {
-    try {
-      const userId = req.body.userId;
-      const updates = req.body.updates;
-
-      if (!userId) {
-        res.status(401).json({ error: "userId is required in request body." });
-        return;
-      }
-
-      if (!updates || typeof updates !== "object") {
-        res.status(400).json({ error: "updates object is required." });
-        return;
-      }
-
-      const updatedUser = await UserService.updateUserProfile(userId, updates);
-
-      res.status(200).json({
-        message: "User profile updated successfully.",
-        user: updatedUser,
-      });
-    } catch (err: any) {
-      const statusCode = err.message === "User not found" ? 404 : 400;
-      res.status(statusCode).json({
-        error: err.message || "Failed to update user profile.",
-      });
-    }
-  }
-
   /**
    * PATCH /api/v1/chat/groups/:conversationId/members/role
    */
@@ -332,10 +279,10 @@ export class UserController {
   ): Promise<void> {
     try {
       const { conversationId } = req.params as { conversationId: string };
-      const { currentUserId, targetUserId, newRole } = req.body;
 
-      // Alternatively, extract currentUserId from authenticated session/JWT middleware:
-      // const currentUserId = (req as any).user?.id;
+      const { targetUserId, newRole } = req.body;
+
+      const currentUserId = req.auth.userId;
 
       const updatedMember = await UserService.updateGroupMemberRole(
         conversationId,
@@ -356,6 +303,36 @@ export class UserController {
       res
         .status(statusCode)
         .json({ error: err.message || "Failed to update role." });
+    }
+  }
+
+  static async updateUserProfile(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = req.auth.userId;
+
+      const { updates } = req.body;
+
+      const updatedUser = await UserService.updateUserProfile(userId, updates);
+
+      res.status(200).json({
+        message: "User profile updated successfully.",
+        user: updatedUser,
+      });
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Failed to update user profile.";
+
+      let statusCode = 400;
+
+      if (message === "User not found") {
+        statusCode = 404;
+      } else if (message === "Username already exists") {
+        statusCode = 409;
+      }
+
+      res.status(statusCode).json({
+        error: message,
+      });
     }
   }
 }

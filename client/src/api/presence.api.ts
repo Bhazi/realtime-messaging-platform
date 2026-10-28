@@ -7,9 +7,6 @@ export const presenceApi = {
   isParticipantOnline: async (targetId: string) => {
     const response = await apiFetch(`/presence/${targetId}`, {
       method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
     });
 
     if (!response.ok) {

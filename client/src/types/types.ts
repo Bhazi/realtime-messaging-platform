@@ -72,3 +72,45 @@ export interface AuthState {
   user: User | null;
   token: string | null;
 }
+
+export type UpdateUserProfileInput = {
+  displayName?: string;
+  username?: string;
+};
+
+export interface SignupPayload {
+  username: string;
+  email: string;
+  displayName: string;
+  password: string;
+}
+
+export interface SignupResponse {
+  message: string;
+  user: User;
+}
+
+export interface LoginPayload {
+  identifier: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  user: User;
+  token: string | null;
+}
+
+export interface LogoutResponse {
+  message: string;
+}
+
+export interface MessageCursor {
+  createdAt: string;
+  id: string;
+}
+
+export interface GetMessagesResponse {
+  messages: Message[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}

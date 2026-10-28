@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { ChatService } from "./chat.services.js";
 import { emitNewMessage } from "./chat.socket.js";
 
+import { messageCursorSchema } from "./chat.schema.js";
+
 export class ChatController {
   static async createDirectConversation(
     req: Request,
@@ -9,17 +11,8 @@ export class ChatController {
   ): Promise<void> {
     try {
       const { targetUid } = req.body;
-      const currentUserId = (req as any).user?.id || req.body.currentUserId;
 
-      if (!currentUserId) {
-        res.status(401).json({ error: "Unauthorized: User ID is required." });
-        return;
-      }
-
-      if (!targetUid) {
-        res.status(400).json({ error: "targetUid is required." });
-        return;
-      }
+      const currentUserId = req.auth.userId;
 
       const conversation = await ChatService.createDirectConversation(
         currentUserId,
@@ -38,92 +31,24 @@ export class ChatController {
     }
   }
 
-  static async getConversations(req: Request, res: Response): Promise<void> {
-    try {
-      let currentUserId = (req as any).user?.id || req.query.id;
-
-      if (!currentUserId) {
-        res.status(401).json({ error: "Unauthorized: User ID is required." });
-        return;
-      }
-
-      const conversations = await ChatService.getConversations(
-        currentUserId as string,
-      );
-
-      res.status(200).json(conversations);
-    } catch (err: any) {
-      console.error("reached the error ", err);
-
-      res
-        .status(500)
-        .json({ error: err.message || "Failed to fetch conversations." });
-    }
-  }
-
   static async createGroupConversation(
     req: Request,
     res: Response,
   ): Promise<void> {
     try {
-      const {
-        groupName: name,
-        addedUids: bodyMemberUids,
-        userId: bodyUserId,
-      } = req.body;
+      const currentUserId = req.auth.userId;
 
-      const currentUserId = (req as any).user?.id || bodyUserId;
+      // Already validated and transformed by Zod middleware
+      const { groupName, addedUids } = req.body;
 
-      if (!currentUserId) {
-        res.status(401).json({
-          error: "Unauthorized: currentUserId is required.",
-        });
-        return;
-      }
-
-      if (!name || typeof name !== "string") {
-        res.status(400).json({
-          error: "Group name is required.",
-        });
-        return;
-      }
-
-      let memberUids: string[] = [];
-
-      if (bodyMemberUids) {
-        try {
-          memberUids =
-            typeof bodyMemberUids === "string"
-              ? JSON.parse(bodyMemberUids)
-              : bodyMemberUids;
-        } catch {
-          res.status(400).json({
-            error: "Invalid memberUids format.",
-          });
-          return;
-        }
-      }
-
-      // Make sure it is actually an array
-      if (!Array.isArray(memberUids)) {
-        res.status(400).json({
-          error: "memberUids must be an array.",
-        });
-        return;
-      }
-
-      const file = req.file;
-
-      let avatarUrl: string | null = null;
-
-      if (file) {
-        avatarUrl = `/uploads/group-images/${file.filename}`;
-      }
+      const avatarUrl = req.file
+        ? `/uploads/group-images/${req.file.filename}`
+        : null;
 
       const conversation = await ChatService.createGroupConversation(
         currentUserId,
-        name,
-        memberUids,
+        groupName,
+        addedUids,
         avatarUrl,
       );
 
@@ -140,52 +65,54 @@ export class ChatController {
     }
   }
 
-  static async sendMessage(req: Request, res: Response): Promise<void> {
+  static async deleteMessage(req: Request, res: Response): Promise<void> {
     try {
-      const {
-        conversationId,
-        senderId: bodySenderId,
-        type,
-        content,
-      } = req.body;
+      const { messageId } = req.params as { messageId: string };
 
-      const senderId = (req as any).user?.id || bodySenderId;
-      const file = req.file;
+      const currentUserId = req.auth?.userId;
 
-      if (!senderId) {
+      if (!currentUserId) {
         res.status(401).json({
-          error: "Unauthorized: senderId is required.",
+          success: false,
+          error: "Authentication required.",
         });
         return;
       }
 
-      if (!conversationId) {
-        res.status(400).json({
-          error: "conversationId is required.",
-        });
-        return;
-      }
+      const success = await ChatService.deleteMessage(messageId, currentUserId);
 
-      const message = await ChatService.sendMessage(
-        conversationId,
-        senderId,
-        type,
-        content,
-        file,
-      );
-
-      // Notify everyone in this conversation
-      emitNewMessage(conversationId, senderId, message);
-
-      // Normal REST response to the sender
-      res.status(201).json({
-        message: "Message sent successfully",
-        data: message,
+      res.status(200).json({
+        success,
+        message: "Message deleted successfully.",
       });
     } catch (err: any) {
-      res.status(400).json({
-        error: err.message || "Failed to send message.",
+      let statusCode = 400;
+      if (err.message.includes("Permission denied")) {
+        statusCode = 403;
+      } else if (err.message.includes("not found")) {
+        statusCode = 404;
+      }
+
+      res.status(statusCode).json({
+        success: false,
+        error: err.message || "Failed to delete message.",
       });
+    }
+  }
+
+  static async getConversations(req: Request, res: Response): Promise<void> {
+    try {
+      const currentUserId = req.auth.userId;
+
+      const conversations = await ChatService.getConversations(currentUserId);
+
+      res.status(200).json(conversations);
+    } catch (err: any) {
+      console.error("reached the error ", err);
+
+      res
+        .status(500)
+        .json({ error: err.message || "Failed to fetch conversations." });
     }
   }
 
@@ -195,15 +122,25 @@ export class ChatController {
 
       const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
 
-      const cursorParam = req.query.cursor as string | undefined;
+      const cursorParam =
+        typeof req.query.cursor === "string" ? req.query.cursor : undefined;
 
       let cursor;
 
       if (cursorParam) {
         try {
-          cursor = JSON.parse(
+          const decoded: unknown = JSON.parse(
             Buffer.from(cursorParam, "base64").toString("utf8"),
           );
+
+          const parsed = messageCursorSchema.safeParse(decoded);
+
+          if (!parsed.success) {
+            res.status(400).json({ error: "Invalid cursor." });
+            return;
+          }
+
+          cursor = parsed.data;
         } catch {
           res.status(400).json({
             error: "Invalid cursor.",
@@ -234,33 +171,35 @@ export class ChatController {
     }
   }
 
-  static async deleteMessage(req: Request, res: Response): Promise<void> {
+  static async sendMessage(req: Request, res: Response): Promise<void> {
     try {
-      const { messageId } = req.params as { messageId: string };
-      const { userId } = req.body;
+      const { conversationId } = req.params as { conversationId: string };
+      const { type, content } = req.body as {
+        type: string;
+        content: string;
+      };
+      const senderId = req.auth.userId;
+      const file = req.file;
 
-      if (!userId) {
-        res.status(400).json({ error: "userId is required." });
-        return;
-      }
+      const message = await ChatService.sendMessage(
+        conversationId,
+        senderId,
+        type,
+        content,
+        file,
+      );
 
-      const success = await ChatService.deleteMessage(messageId, userId);
+      // Notify everyone in this conversation
+      emitNewMessage(conversationId, senderId, message);
 
-      res.status(200).json({
-        success,
-        message: "Message deleted successfully.",
+      // Normal REST response to the sender
+      res.status(201).json({
+        message: "Message sent successfully",
+        data: message,
       });
     } catch (err: any) {
-      let statusCode = 400;
-      if (err.message.includes("Permission denied")) {
-        statusCode = 403;
-      } else if (err.message.includes("not found")) {
-        statusCode = 404;
-      }
-
-      res.status(statusCode).json({
-        success: false,
-        error: err.message || "Failed to delete message.",
+      res.status(400).json({
+        error: err.message || "Failed to send message.",
       });
     }
   }

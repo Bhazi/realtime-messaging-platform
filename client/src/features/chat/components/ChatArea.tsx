@@ -73,11 +73,7 @@ export const ChatArea = ({
   const messageInputRef = useRef<HTMLInputElement>(null);
   const shouldScrollToBottomRef = useRef(false);
 
-  /*
-   * =====================================================
-   * DERIVED VALUES
-   * =====================================================
-   */
+  // DERIVED VALUES
 
   const currentMember = conversation.members.find(
     (member) => member.userId === currentUser.id,
@@ -90,11 +86,7 @@ export const ChatArea = ({
   const isGroup = conversation.type === "GROUP";
   const isDirect = conversation.type === "DIRECT";
 
-  /*
-   * =====================================================
-   * PRESENCE
-   * =====================================================
-   */
+  // PRESENCE
 
   useEffect(() => {
     let cancelled = false;
@@ -182,11 +174,7 @@ export const ChatArea = ({
     };
   }, [conversation.members, currentUser.id, isDirect]);
 
-  /*
-   * =====================================================
-   * HELPERS
-   * =====================================================
-   */
+  //HELPERS;
 
   const formatLastSeen = (date: string): string => {
     const lastSeenDate = new Date(date);
@@ -249,11 +237,7 @@ export const ChatArea = ({
     );
   };
 
-  /*
-   * =====================================================
-   * LOAD MESSAGES
-   * =====================================================
-   */
+  //LOAD MESSAGES
 
   useEffect(() => {
     let cancelled = false;
@@ -301,11 +285,7 @@ export const ChatArea = ({
     };
   }, [conversation.id]);
 
-  /*
-   * =====================================================
-   * SOCKET.IO — JOIN / LEAVE CONVERSATION
-   * =====================================================
-   */
+  //SOCKET.IO — JOIN / LEAVE CONVERSATION
 
   useEffect(() => {
     const conversationId = conversation.id;
@@ -317,11 +297,7 @@ export const ChatArea = ({
     };
   }, [conversation.id]);
 
-  /*
-   * =====================================================
-   * SOCKET.IO — MESSAGE RECEIPTS
-   * =====================================================
-   */
+  //SOCKET.IO — MESSAGE RECEIPTS
 
   useEffect(() => {
     const handleMessageDelivered = ({
@@ -371,11 +347,7 @@ export const ChatArea = ({
     };
   }, [conversation.id]);
 
-  /*
-   * =====================================================
-   * SOCKET.IO — NEW MESSAGE
-   * =====================================================
-   */
+  //SOCKET.IO — NEW MESSAGE
 
   useEffect(() => {
     const handleNewMessage = ({
@@ -413,11 +385,7 @@ export const ChatArea = ({
     };
   }, [conversation.id, currentUser.id]);
 
-  /*
-   * =====================================================
-   * LOAD OLDER MESSAGES
-   * =====================================================
-   */
+  //LOAD OLDER MESSAGES
 
   const loadOlderMessages = async (): Promise<void> => {
     if (isLoadingMessages || !hasMoreMessages || !nextCursor) {
@@ -451,11 +419,7 @@ export const ChatArea = ({
     }
   };
 
-  /*
-   * =====================================================
-   * SEND MESSAGE
-   * =====================================================
-   */
+  //SEND MESSAGE
 
   const handleSendText = async (event?: FormEvent) => {
     event?.preventDefault();
@@ -467,7 +431,7 @@ export const ChatArea = ({
     }
 
     try {
-      await chatApi.sendMessage(conversation.id, currentUser.id, "TEXT", {
+      await chatApi.sendMessage(conversation.id, "TEXT", {
         content,
       });
 
@@ -478,11 +442,7 @@ export const ChatArea = ({
     }
   };
 
-  /*
-   * =====================================================
-   * SEND FILE
-   * =====================================================
-   */
+  // SEND FILE
 
   const handleSendFile = async (
     type: MessageType,
@@ -490,7 +450,7 @@ export const ChatArea = ({
     caption?: string,
   ) => {
     try {
-      await chatApi.sendMessage(conversation.id, currentUser.id, type, {
+      await chatApi.sendMessage(conversation.id, type, {
         content: caption,
         file,
       });
@@ -501,15 +461,11 @@ export const ChatArea = ({
     }
   };
 
-  /*
-   * =====================================================
-   * DELETE MESSAGE
-   * =====================================================
-   */
+  //DELETE MESSAGE
 
   const handleDeleteMessage = async (messageId: string) => {
     try {
-      await chatApi.deleteMessage(messageId, currentUser.id);
+      await chatApi.deleteMessage(messageId);
 
       onRefresh();
 
@@ -522,11 +478,7 @@ export const ChatArea = ({
     }
   };
 
-  /*
-   * =====================================================
-   * DELETE CONVERSATION
-   * =====================================================
-   */
+  //DELETE CONVERSATION
 
   const handleDeleteConversation = () => {
     setIsRemoveModalOpen(true);
@@ -535,9 +487,9 @@ export const ChatArea = ({
   const handleRemoveChat = async () => {
     try {
       if (isGroup) {
-        await userApi.deleteGroupConversation(conversation.id, currentUser.id);
+        await userApi.deleteGroupConversation(conversation.id);
       } else {
-        await userApi.deleteDirectConversation(conversation.id, currentUser.id);
+        await userApi.deleteDirectConversation(conversation.id);
       }
 
       onRefresh();
@@ -548,11 +500,7 @@ export const ChatArea = ({
     }
   };
 
-  /*
-   * =====================================================
-   * RENDER
-   * =====================================================
-   */
+  //RENDER
 
   const displayName =
     conversation.name!.charAt(0).toUpperCase() +

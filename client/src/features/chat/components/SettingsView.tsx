@@ -90,7 +90,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
     const formData = new FormData();
 
-    formData.append("userId", currentUser.id);
     formData.append("avatar", selectedImage);
 
     try {
@@ -120,7 +119,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const updatedUser: User = await userApi.updateUserProfile(currentUser.id, {
+    const updatedUser: User = await userApi.updateUserProfile({
       displayName: displayName.trim(),
       username: username.trim(),
     });
@@ -137,7 +136,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     e.preventDefault();
 
     // API calling for changing the password
-    await userApi.changePassword(currentUser.id, oldPass, newPass);
+    await userApi.changePassword(oldPass, newPass);
 
     setPassSaved(true);
     setOldPass("");
